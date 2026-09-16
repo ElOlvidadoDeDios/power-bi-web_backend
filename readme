@@ -1,3 +1,3 @@
 ejecutar:
-cd artifacts/api-server
+npm install --legacy-peer-deps
 npm run dev

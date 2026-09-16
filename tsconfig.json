@@ -1,19 +1,25 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
-    "types": ["node"]
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
   },
-  "include": ["src", "../power-bi-web/src/components/WorkdayStrip.tsx", "../power-bi-web/src/components/FilterBar.tsx", "../power-bi-web/src/components/ui/GaugeChart.tsx", "../power-bi-web/src/components/ui/KpiCard.tsx", "../power-bi-web/src/components/ui/LoadingState.tsx", "../power-bi-web/src/components/ui/Panel.tsx", "../power-bi-web/src/components/ui/SectionBand.tsx", "../power-bi-web/src/components/ui/StatusCell.tsx", "../power-bi-web/src/components/ui/TableShell.tsx", "../power-bi-web/src/views", "../power-bi-web/src/utils"],
+  "compileOnSave": false,
+  "include": ["src/**/*"],
   "references": [
     {
-      "path": "../../lib/db"
+      "path": "./lib/db"
     },
     {
-      "path": "../../lib/api-zod"
+      "path": "./lib/api-client-react"
+    },
+    {
+      "path": "./lib/api-zod"
     }
   ]
 }
