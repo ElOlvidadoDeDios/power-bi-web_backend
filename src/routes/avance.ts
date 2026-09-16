@@ -1,23 +1,16 @@
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true },
-};
 
 router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
   const agencia = req.query.agencia as string || "";
   const asesor = req.query.asesor as string || "";
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    // Cruzamos la tabla de avance con las dimensiones usando el periodo actual
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -43,7 +36,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
       ORDER BY A.[Avance Cartera] DESC;
     `;
 
-    const result = await pool.request()
+    const result = await request
       .input('agencia', sql.VarChar(50), agencia)
       .input('asesor', sql.VarChar(100), asesor)
       .query(querySQL);

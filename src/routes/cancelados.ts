@@ -1,14 +1,8 @@
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from '../lib/db';
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true },
-};
 
 router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Response) => {
   const agencia = req.query.agencia as string || "";
@@ -17,9 +11,8 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
   const frecuencia = req.query.frecuencia as string || "";
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    // Consulta SQL adaptada exactamente a las columnas de creditos_cancelados_no_renovados
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -42,11 +35,10 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
       FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON C.IdSAsesor = D_AS.IdSAsesor 
-          -- Cruzamos con el periodo de la fecha de cancelación para obtener el asesor exacto en ese momento
           AND D_AS.Periodo = CONVERT(VARCHAR(6), C.[Fecha_Cancelacion], 112)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
           ON D_AS.IdSAgencia = DA.IdSAgencia
-      WHERE C.[Fecha_Cancelacion] >= DATEADD(month, -6, GETDATE()) -- Últimos 6 meses
+      WHERE C.[Fecha_Cancelacion] >= DATEADD(month, -6, GETDATE()) 
         AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
         AND (@tipoCancelacion = '' OR C.[Tipo_Cancelacion] = @tipoCancelacion)
@@ -54,7 +46,7 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
       ORDER BY C.[Fecha_Cancelacion] DESC;
     `;
 
-    const result = await pool.request()
+    const result = await request
       .input('agencia', sql.VarChar(50), agencia)
       .input('asesor', sql.VarChar(100), asesor)
       .input('tipoCancelacion', sql.VarChar(50), tipoCancelacion)

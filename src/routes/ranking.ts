@@ -1,14 +1,8 @@
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true },
-};
 
 router.get(["/ranking", "/api/ranking"], async (req: Request, res: Response) => {
   const periodo = req.query.periodo as string || "";
@@ -20,9 +14,8 @@ router.get(["/ranking", "/api/ranking"], async (req: Request, res: Response) => 
   }
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    // Cruzamos Flow con Agencia, Asesor y Administrador
     const querySQL = `
       SELECT 
           ISNULL(D_AS.Asesor, F.IdSAsesor) AS Asesor,
@@ -49,7 +42,7 @@ router.get(["/ranking", "/api/ranking"], async (req: Request, res: Response) => 
       ORDER BY Operaciones DESC, Desembolsos DESC;
     `;
 
-    const result = await pool.request()
+    const result = await request
       .input('periodo', sql.VarChar(6), periodo)
       .input('agencia', sql.VarChar(50), agencia)
       .input('asesor', sql.VarChar(100), asesor)

@@ -15,7 +15,6 @@
     "cors": "^2.8.6",
     "drizzle-orm": "latest",
     "express": "^5.2.1",
-    "msnodesqlv8": "^5.2.3",
     "mssql": "^12.7.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0"

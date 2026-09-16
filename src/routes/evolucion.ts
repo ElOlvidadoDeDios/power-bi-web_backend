@@ -1,14 +1,8 @@
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true },
-};
 
 router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response) => {
   const agencia = req.query.agencia as string || "";
@@ -18,7 +12,7 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
   const hasta = req.query.hasta as string;
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     let querySQL = "";
 
     if (granularidad === "Mensual") {
@@ -71,7 +65,6 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
         ORDER BY C.Periodo ASC;
       `;
     } else {
-      // GRANULARIDAD DIARIA
       querySQL = `
         WITH Calendario AS (
             SELECT DISTINCT Fecha, CAST(DAY(Fecha) AS VARCHAR) + ' ' + LEFT(Mes, 3) AS Etiqueta
@@ -109,7 +102,7 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
       `;
     }
 
-    const result = await pool.request()
+    const result = await request
       .input('agencia', sql.VarChar(50), agencia)
       .input('asesor', sql.VarChar(100), asesor)
       .input('desde', sql.VarChar(10), desde)

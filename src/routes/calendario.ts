@@ -1,26 +1,16 @@
-//routes/calendario.ts
-
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_PRODUCTIVIDAD_NAME || "dm_productividad",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true,
-  },
-};
 
 router.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (req: Request, res: Response) => {
   const { periodo } = req.params;
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    const result = await pool.request()
+    const result = await request
       .input('periodo', sql.VarChar(6), periodo)
       .query(`
         -- 1. Obtenemos Fecha y Hora de Perú (-5 UTC)

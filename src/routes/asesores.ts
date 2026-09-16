@@ -1,26 +1,16 @@
-//routes/asesores.ts
-
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true,
-  },
-};
 
 router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request, res: Response) => {
   const { periodo } = req.params;
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    const result = await pool.request()
+    const result = await request
       .input('periodo', sql.VarChar(6), periodo)
       .query(`
         WITH CTE_Asesores_Com AS (
@@ -40,7 +30,6 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
-        -- 🚀 OPTIMIZACIÓN: Pre-agrupamos metas para evitar el problema N+1
         CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month

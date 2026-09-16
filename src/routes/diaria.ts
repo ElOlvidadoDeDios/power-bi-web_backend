@@ -1,27 +1,17 @@
-//routes/diaria.ts
-
 import { Router, Request, Response } from "express";
-import sql from "mssql/msnodesqlv8.js";
+import sql from "mssql";
+import { pool } from "../lib/db";
 
 const router = Router();
-
-const dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true,
-  },
-};
 
 router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, res: Response) => {
   const { periodo } = req.params;
   const dayFilter = (req.query.day as string) || 'Hoy';
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const request = pool.request();
     
-    const result = await pool.request()
+    const result = await request
       .input('periodo', sql.VarChar(6), periodo)
       .input('dayFilter', sql.VarChar(20), dayFilter)
       .query(`
@@ -35,16 +25,13 @@ router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, re
         ELSE
             BEGIN
                 BEGIN TRY
-                    -- Si React envía '2026-08-15', lo convierte a fecha real
                     SET @TargetDate = CAST(@dayFilter AS DATE);
                 END TRY
                 BEGIN CATCH
-                    -- Si hay un error, vuelve a 'Hoy' por seguridad
                     SET @TargetDate = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
                 END CATCH
             END
         
-        -- Fallback: Si no hay meta en esa fecha, busca la última disponible del periodo
         IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate)
         BEGIN
             SELECT TOP 1 @TargetDate = Fecha 
