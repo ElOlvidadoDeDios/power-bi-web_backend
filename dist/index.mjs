@@ -42,6 +42,325 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
+// node_modules/dotenv/lib/main.js
+var require_main = __commonJS({
+  "node_modules/dotenv/lib/main.js"(exports, module) {
+    var fs = __require("fs");
+    var path = __require("path");
+    var os = __require("os");
+    var crypto = __require("crypto");
+    var TIPS = [
+      "\u25C8 encrypted .env [www.dotenvx.com]",
+      "\u25C8 secrets for agents [www.dotenvx.com]",
+      "\u2301 auth for agents [www.vestauth.com]",
+      "\u2318 custom filepath { path: '/custom/path/.env' }",
+      "\u2318 enable debugging { debug: true }",
+      "\u2318 override existing { override: true }",
+      "\u2318 suppress logs { quiet: true }",
+      "\u2318 multiple files { path: ['.env.local', '.env'] }"
+    ];
+    function _getRandomTip() {
+      return TIPS[Math.floor(Math.random() * TIPS.length)];
+    }
+    function parseBoolean(value) {
+      if (typeof value === "string") {
+        return !["false", "0", "no", "off", ""].includes(value.toLowerCase());
+      }
+      return Boolean(value);
+    }
+    function supportsAnsi() {
+      return process.stdout.isTTY;
+    }
+    function dim(text) {
+      return supportsAnsi() ? `\x1B[2m${text}\x1B[0m` : text;
+    }
+    var LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+    function parse2(src) {
+      const obj = {};
+      let lines = src.toString();
+      lines = lines.replace(/\r\n?/mg, "\n");
+      let match;
+      while ((match = LINE.exec(lines)) != null) {
+        const key = match[1];
+        let value = match[2] || "";
+        value = value.trim();
+        const maybeQuote = value[0];
+        value = value.replace(/^(['"`])([\s\S]*)\1$/mg, "$2");
+        if (maybeQuote === '"') {
+          value = value.replace(/\\n/g, "\n");
+          value = value.replace(/\\r/g, "\r");
+        }
+        obj[key] = value;
+      }
+      return obj;
+    }
+    function _parseVault(options) {
+      options = options || {};
+      const vaultPath = _vaultPath(options);
+      options.path = vaultPath;
+      const result = DotenvModule.configDotenv(options);
+      if (!result.parsed) {
+        const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
+        err.code = "MISSING_DATA";
+        throw err;
+      }
+      const keys = _dotenvKey(options).split(",");
+      const length = keys.length;
+      let decrypted;
+      for (let i = 0; i < length; i++) {
+        try {
+          const key = keys[i].trim();
+          const attrs = _instructions(result, key);
+          decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
+          break;
+        } catch (error2) {
+          if (i + 1 >= length) {
+            throw error2;
+          }
+        }
+      }
+      return DotenvModule.parse(decrypted);
+    }
+    function _warn(message) {
+      console.error(`\u26A0 ${message}`);
+    }
+    function _debug(message) {
+      console.log(`\u2506 ${message}`);
+    }
+    function _log(message) {
+      console.log(`\u25C7 ${message}`);
+    }
+    function _dotenvKey(options) {
+      if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
+        return options.DOTENV_KEY;
+      }
+      if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
+        return process.env.DOTENV_KEY;
+      }
+      return "";
+    }
+    function _instructions(result, dotenvKey) {
+      let uri;
+      try {
+        uri = new URL(dotenvKey);
+      } catch (error2) {
+        if (error2.code === "ERR_INVALID_URL") {
+          const err = new Error("INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        }
+        throw error2;
+      }
+      const key = uri.password;
+      if (!key) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing key part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environment = uri.searchParams.get("environment");
+      if (!environment) {
+        const err = new Error("INVALID_DOTENV_KEY: Missing environment part");
+        err.code = "INVALID_DOTENV_KEY";
+        throw err;
+      }
+      const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
+      const ciphertext = result.parsed[environmentKey];
+      if (!ciphertext) {
+        const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
+        err.code = "NOT_FOUND_DOTENV_ENVIRONMENT";
+        throw err;
+      }
+      return { ciphertext, key };
+    }
+    function _vaultPath(options) {
+      let possibleVaultPath = null;
+      if (options && options.path && options.path.length > 0) {
+        if (Array.isArray(options.path)) {
+          for (const filepath of options.path) {
+            if (fs.existsSync(filepath)) {
+              possibleVaultPath = filepath.endsWith(".vault") ? filepath : `${filepath}.vault`;
+            }
+          }
+        } else {
+          possibleVaultPath = options.path.endsWith(".vault") ? options.path : `${options.path}.vault`;
+        }
+      } else {
+        possibleVaultPath = path.resolve(process.cwd(), ".env.vault");
+      }
+      if (fs.existsSync(possibleVaultPath)) {
+        return possibleVaultPath;
+      }
+      return null;
+    }
+    function _resolveHome(envPath) {
+      return envPath[0] === "~" ? path.join(os.homedir(), envPath.slice(1)) : envPath;
+    }
+    function _configVault(options) {
+      const debug = parseBoolean(process.env.DOTENV_CONFIG_DEBUG || options && options.debug);
+      const quiet = parseBoolean(process.env.DOTENV_CONFIG_QUIET || options && options.quiet);
+      if (debug || !quiet) {
+        _log("loading env from encrypted .env.vault");
+      }
+      const parsed = DotenvModule._parseVault(options);
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      DotenvModule.populate(processEnv, parsed, options);
+      return { parsed };
+    }
+    function configDotenv(options) {
+      const dotenvPath = path.resolve(process.cwd(), ".env");
+      let encoding = "utf8";
+      let processEnv = process.env;
+      if (options && options.processEnv != null) {
+        processEnv = options.processEnv;
+      }
+      let debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || options && options.debug);
+      let quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || options && options.quiet);
+      if (options && options.encoding) {
+        encoding = options.encoding;
+      } else {
+        if (debug) {
+          _debug("no encoding is specified (UTF-8 is used by default)");
+        }
+      }
+      let optionPaths = [dotenvPath];
+      if (options && options.path) {
+        if (!Array.isArray(options.path)) {
+          optionPaths = [_resolveHome(options.path)];
+        } else {
+          optionPaths = [];
+          for (const filepath of options.path) {
+            optionPaths.push(_resolveHome(filepath));
+          }
+        }
+      }
+      let lastError;
+      const parsedAll = {};
+      for (const path2 of optionPaths) {
+        try {
+          const parsed = DotenvModule.parse(fs.readFileSync(path2, { encoding }));
+          DotenvModule.populate(parsedAll, parsed, options);
+        } catch (e) {
+          if (debug) {
+            _debug(`failed to load ${path2} ${e.message}`);
+          }
+          lastError = e;
+        }
+      }
+      const populated = DotenvModule.populate(processEnv, parsedAll, options);
+      debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || debug);
+      quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || quiet);
+      if (debug || !quiet) {
+        const keysCount = Object.keys(populated).length;
+        const shortPaths = [];
+        for (const filePath of optionPaths) {
+          try {
+            const relative = path.relative(process.cwd(), filePath);
+            shortPaths.push(relative);
+          } catch (e) {
+            if (debug) {
+              _debug(`failed to load ${filePath} ${e.message}`);
+            }
+            lastError = e;
+          }
+        }
+        _log(`injected env (${keysCount}) from ${shortPaths.join(",")} ${dim(`// tip: ${_getRandomTip()}`)}`);
+      }
+      if (lastError) {
+        return { parsed: parsedAll, error: lastError };
+      } else {
+        return { parsed: parsedAll };
+      }
+    }
+    function config2(options) {
+      if (_dotenvKey(options).length === 0) {
+        return DotenvModule.configDotenv(options);
+      }
+      const vaultPath = _vaultPath(options);
+      if (!vaultPath) {
+        _warn(`you set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}`);
+        return DotenvModule.configDotenv(options);
+      }
+      return DotenvModule._configVault(options);
+    }
+    function decrypt(encrypted, keyStr) {
+      const key = Buffer.from(keyStr.slice(-64), "hex");
+      let ciphertext = Buffer.from(encrypted, "base64");
+      const nonce = ciphertext.subarray(0, 12);
+      const authTag = ciphertext.subarray(-16);
+      ciphertext = ciphertext.subarray(12, -16);
+      try {
+        const aesgcm = crypto.createDecipheriv("aes-256-gcm", key, nonce);
+        aesgcm.setAuthTag(authTag);
+        return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
+      } catch (error2) {
+        const isRange = error2 instanceof RangeError;
+        const invalidKeyLength = error2.message === "Invalid key length";
+        const decryptionFailed = error2.message === "Unsupported state or unable to authenticate data";
+        if (isRange || invalidKeyLength) {
+          const err = new Error("INVALID_DOTENV_KEY: It must be 64 characters long (or more)");
+          err.code = "INVALID_DOTENV_KEY";
+          throw err;
+        } else if (decryptionFailed) {
+          const err = new Error("DECRYPTION_FAILED: Please check your DOTENV_KEY");
+          err.code = "DECRYPTION_FAILED";
+          throw err;
+        } else {
+          throw error2;
+        }
+      }
+    }
+    function populate(processEnv, parsed, options = {}) {
+      const debug = Boolean(options && options.debug);
+      const override = Boolean(options && options.override);
+      const populated = {};
+      if (typeof parsed !== "object") {
+        const err = new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");
+        err.code = "OBJECT_REQUIRED";
+        throw err;
+      }
+      for (const key of Object.keys(parsed)) {
+        if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
+          if (override === true) {
+            processEnv[key] = parsed[key];
+            populated[key] = parsed[key];
+          }
+          if (debug) {
+            if (override === true) {
+              _debug(`"${key}" is already defined and WAS overwritten`);
+            } else {
+              _debug(`"${key}" is already defined and was NOT overwritten`);
+            }
+          }
+        } else {
+          processEnv[key] = parsed[key];
+          populated[key] = parsed[key];
+        }
+      }
+      return populated;
+    }
+    var DotenvModule = {
+      configDotenv,
+      _configVault,
+      _parseVault,
+      config: config2,
+      decrypt,
+      parse: parse2,
+      populate
+    };
+    module.exports.configDotenv = DotenvModule.configDotenv;
+    module.exports._configVault = DotenvModule._configVault;
+    module.exports._parseVault = DotenvModule._parseVault;
+    module.exports.config = DotenvModule.config;
+    module.exports.decrypt = DotenvModule.decrypt;
+    module.exports.parse = DotenvModule.parse;
+    module.exports.populate = DotenvModule.populate;
+    module.exports = DotenvModule;
+  }
+});
+
 // node_modules/ms/index.js
 var require_ms = __commonJS({
   "node_modules/ms/index.js"(exports, module) {
@@ -28654,6 +28973,9 @@ var require_pino = __commonJS({
   }
 });
 
+// src/index.ts
+var import_dotenv2 = __toESM(require_main(), 1);
+
 // src/app.ts
 var import_express15 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
@@ -34093,19 +34415,38 @@ var health_default = router;
 
 // src/routes/preventiva.ts
 var import_express2 = __toESM(require_express2(), 1);
-import sql from "mssql/msnodesqlv8.js";
-var router2 = (0, import_express2.Router)();
+
+// src/lib/db.ts
+var import_dotenv = __toESM(require_main(), 1);
+import sql from "mssql";
+import_dotenv.default.config();
 var dbConfig = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
+  server: process.env.DB_SERVER || "localhost",
+  database: "DWH_Gestion_Cartera",
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || "1433"),
   options: {
-    trustedConnection: true
+    encrypt: false,
+    trustServerCertificate: true
   }
 };
+var pool = new sql.ConnectionPool(dbConfig);
+var connectDB = async () => {
+  try {
+    console.log(`\u23F3 Intentando conectar con el usuario: '${process.env.DB_USER}'`);
+    await pool.connect();
+    console.log("\u2705 Conectado exitosamente a SQL Server");
+  } catch (err) {
+    console.error("\u274C Error al conectar a la base de datos: ", err);
+    process.exit(1);
+  }
+};
+
+// src/routes/preventiva.ts
+var router2 = (0, import_express2.Router)();
 router2.get("/api/gestion-preventiva", async (_req, res) => {
   try {
-    const pool = await sql.connect(dbConfig);
     const result = await pool.request().query(`
       WITH ReporteGestionPreventiva AS (
           SELECT 
@@ -34183,19 +34524,9 @@ var preventiva_default = router2;
 
 // src/routes/filtros.ts
 var import_express3 = __toESM(require_express2(), 1);
-import sql2 from "mssql/msnodesqlv8.js";
 var router3 = (0, import_express3.Router)();
-var dbConfig2 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
   try {
-    const pool = await sql2.connect(dbConfig2);
     const periodos = await pool.request().query(`
       SELECT DISTINCT [Periodo] 
       FROM [dm_productividad].[dbo].[dim_calendario] 
@@ -34214,8 +34545,8 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
     const fechas = await pool.request().query(`
       SELECT 
           [Periodo], 
-          CAST([Fecha] AS VARCHAR(10)) AS FechaValor, -- Formato YYYY-MM-DD para SQL
-          CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista -- Formato DD/MM/YYYY para React
+          CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
+          CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
       FROM [dm_productividad].[dbo].[dim_calendario]
       WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
       ORDER BY [Fecha] DESC
@@ -34234,21 +34565,13 @@ var filtros_default = router3;
 
 // src/routes/calendario.ts
 var import_express4 = __toESM(require_express2(), 1);
-import sql3 from "mssql/msnodesqlv8.js";
+import sql2 from "mssql";
 var router4 = (0, import_express4.Router)();
-var dbConfig3 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_PRODUCTIVIDAD_NAME || "dm_productividad",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router4.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
-    const pool = await sql3.connect(dbConfig3);
-    const result = await pool.request().input("periodo", sql3.VarChar(6), periodo).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql2.VarChar(6), periodo).query(`
         -- 1. Obtenemos Fecha y Hora de Per\xFA (-5 UTC)
         DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
         DECLARE @Hoy DATE = CAST(@FechaHoraPeru AS DATE);
@@ -34314,21 +34637,13 @@ var calendario_default = router4;
 
 // src/routes/gerencia.ts
 var import_express5 = __toESM(require_express2(), 1);
-import sql4 from "mssql/msnodesqlv8.js";
+import sql3 from "mssql";
 var router5 = (0, import_express5.Router)();
-var dbConfig4 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
-    const pool = await sql4.connect(dbConfig4);
-    const result = await pool.request().input("periodo", sql4.VarChar(6), periodo).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql3.VarChar(6), periodo).query(`
         -- =================================================================
         -- QUERY 1: CARTERA COMERCIAL (Excluyendo Recuperadores)
         -- =================================================================
@@ -34397,21 +34712,13 @@ var gerencia_default = router5;
 
 // src/routes/supervision.ts
 var import_express6 = __toESM(require_express2(), 1);
-import sql5 from "mssql/msnodesqlv8.js";
+import sql4 from "mssql";
 var router6 = (0, import_express6.Router)();
-var dbConfig5 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
-    const pool = await sql5.connect(dbConfig5);
-    const result = await pool.request().input("periodo", sql5.VarChar(6), periodo).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql4.VarChar(6), periodo).query(`
         -- =================================================================
         -- 1. AGENCIA COMPLETA
         -- =================================================================
@@ -34583,24 +34890,16 @@ var supervision_default = router6;
 
 // src/routes/agencia.ts
 var import_express7 = __toESM(require_express2(), 1);
-import sql6 from "mssql/msnodesqlv8.js";
+import sql5 from "mssql";
 var router7 = (0, import_express7.Router)();
-var dbConfig6 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router7.get(["/agencia", "/api/agencia"], async (req, res) => {
   const periodo = req.query.periodo;
   if (!periodo) {
     return res.status(400).json({ error: "El periodo es requerido" });
   }
   try {
-    const pool = await sql6.connect(dbConfig6);
-    const result = await pool.request().input("periodo", sql6.VarChar(6), periodo).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql5.VarChar(6), periodo).query(`
         -- =================================================================
         -- 1. ASESORES COMERCIALES
         -- =================================================================
@@ -34700,21 +34999,13 @@ var agencia_default = router7;
 
 // src/routes/asesores.ts
 var import_express8 = __toESM(require_express2(), 1);
-import sql7 from "mssql/msnodesqlv8.js";
+import sql6 from "mssql";
 var router8 = (0, import_express8.Router)();
-var dbConfig7 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
-    const pool = await sql7.connect(dbConfig7);
-    const result = await pool.request().input("periodo", sql7.VarChar(6), periodo).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql6.VarChar(6), periodo).query(`
         WITH CTE_Asesores_Com AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor 
             FROM DWH_Gestion_Cartera.dbo.dim_asesor 
@@ -34732,7 +35023,6 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
-        -- \u{1F680} OPTIMIZACI\xD3N: Pre-agrupamos metas para evitar el problema N+1
         CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month
@@ -34795,22 +35085,14 @@ var asesores_default = router8;
 
 // src/routes/diaria.ts
 var import_express9 = __toESM(require_express2(), 1);
-import sql8 from "mssql/msnodesqlv8.js";
+import sql7 from "mssql";
 var router9 = (0, import_express9.Router)();
-var dbConfig8 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: {
-    trustedConnection: true
-  }
-};
 router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   const dayFilter = req.query.day || "Hoy";
   try {
-    const pool = await sql8.connect(dbConfig8);
-    const result = await pool.request().input("periodo", sql8.VarChar(6), periodo).input("dayFilter", sql8.VarChar(20), dayFilter).query(`
+    const request = pool.request();
+    const result = await request.input("periodo", sql7.VarChar(6), periodo).input("dayFilter", sql7.VarChar(20), dayFilter).query(`
         DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
         DECLARE @TargetDate DATE;
 
@@ -34821,16 +35103,13 @@ router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
         ELSE
             BEGIN
                 BEGIN TRY
-                    -- Si React env\xEDa '2026-08-15', lo convierte a fecha real
                     SET @TargetDate = CAST(@dayFilter AS DATE);
                 END TRY
                 BEGIN CATCH
-                    -- Si hay un error, vuelve a 'Hoy' por seguridad
                     SET @TargetDate = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
                 END CATCH
             END
         
-        -- Fallback: Si no hay meta en esa fecha, busca la \xFAltima disponible del periodo
         IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate)
         BEGIN
             SELECT TOP 1 @TargetDate = Fecha 
@@ -34906,14 +35185,8 @@ var diaria_default = router9;
 
 // src/routes/evolucion.ts
 var import_express10 = __toESM(require_express2(), 1);
-import sql9 from "mssql/msnodesqlv8.js";
+import sql8 from "mssql";
 var router10 = (0, import_express10.Router)();
-var dbConfig9 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true }
-};
 router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
   const agencia = req.query.agencia || "";
   const asesor = req.query.asesor || "";
@@ -34921,7 +35194,7 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
   const desde = req.query.desde;
   const hasta = req.query.hasta;
   try {
-    const pool = await sql9.connect(dbConfig9);
+    const request = pool.request();
     let querySQL = "";
     if (granularidad === "Mensual") {
       querySQL = `
@@ -35009,7 +35282,7 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
         ORDER BY C.Fecha ASC;
       `;
     }
-    const result = await pool.request().input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("desde", sql9.VarChar(10), desde).input("hasta", sql9.VarChar(10), hasta).query(querySQL);
+    const result = await request.input("agencia", sql8.VarChar(50), agencia).input("asesor", sql8.VarChar(100), asesor).input("desde", sql8.VarChar(10), desde).input("hasta", sql8.VarChar(10), hasta).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Evoluci\xF3n:", error2);
@@ -35020,21 +35293,15 @@ var evolucion_default = router10;
 
 // src/routes/cancelados.ts
 var import_express11 = __toESM(require_express2(), 1);
-import sql10 from "mssql/msnodesqlv8.js";
+import sql9 from "mssql";
 var router11 = (0, import_express11.Router)();
-var dbConfig10 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true }
-};
 router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
   const agencia = req.query.agencia || "";
   const asesor = req.query.asesor || "";
   const tipoCancelacion = req.query.tipo || "";
   const frecuencia = req.query.frecuencia || "";
   try {
-    const pool = await sql10.connect(dbConfig10);
+    const request = pool.request();
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -35057,18 +35324,17 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
       FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON C.IdSAsesor = D_AS.IdSAsesor 
-          -- Cruzamos con el periodo de la fecha de cancelaci\xF3n para obtener el asesor exacto en ese momento
           AND D_AS.Periodo = CONVERT(VARCHAR(6), C.[Fecha_Cancelacion], 112)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
           ON D_AS.IdSAgencia = DA.IdSAgencia
-      WHERE C.[Fecha_Cancelacion] >= DATEADD(month, -6, GETDATE()) -- \xDAltimos 6 meses
+      WHERE C.[Fecha_Cancelacion] >= DATEADD(month, -6, GETDATE()) 
         AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
         AND (@tipoCancelacion = '' OR C.[Tipo_Cancelacion] = @tipoCancelacion)
         AND (@frecuencia = '' OR C.[Tipo_Frecuencia] = @frecuencia)
       ORDER BY C.[Fecha_Cancelacion] DESC;
     `;
-    const result = await pool.request().input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).input("tipoCancelacion", sql10.VarChar(50), tipoCancelacion).input("frecuencia", sql10.VarChar(50), frecuencia).query(querySQL);
+    const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("tipoCancelacion", sql9.VarChar(50), tipoCancelacion).input("frecuencia", sql9.VarChar(50), frecuencia).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Cr\xE9ditos Cancelados:", error2);
@@ -35079,19 +35345,13 @@ var cancelados_default = router11;
 
 // src/routes/avance.ts
 var import_express12 = __toESM(require_express2(), 1);
-import sql11 from "mssql/msnodesqlv8.js";
+import sql10 from "mssql";
 var router12 = (0, import_express12.Router)();
-var dbConfig11 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true }
-};
 router12.get(["/avance", "/api/avance"], async (req, res) => {
   const agencia = req.query.agencia || "";
   const asesor = req.query.asesor || "";
   try {
-    const pool = await sql11.connect(dbConfig11);
+    const request = pool.request();
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -35116,7 +35376,7 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
       ORDER BY A.[Avance Cartera] DESC;
     `;
-    const result = await pool.request().input("agencia", sql11.VarChar(50), agencia).input("asesor", sql11.VarChar(100), asesor).query(querySQL);
+    const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Avance de Cartera:", error2);
@@ -35127,14 +35387,8 @@ var avance_default = router12;
 
 // src/routes/ranking.ts
 var import_express13 = __toESM(require_express2(), 1);
-import sql12 from "mssql/msnodesqlv8.js";
+import sql11 from "mssql";
 var router13 = (0, import_express13.Router)();
-var dbConfig12 = {
-  server: process.env.DB_DWH_SERVER || "DESKTOP-K6HIFFS",
-  database: process.env.DB_DWH_NAME || "DWH_Gestion_Cartera",
-  driver: "msnodesqlv8",
-  options: { trustedConnection: true }
-};
 router13.get(["/ranking", "/api/ranking"], async (req, res) => {
   const periodo = req.query.periodo || "";
   const agencia = req.query.agencia || "";
@@ -35143,7 +35397,7 @@ router13.get(["/ranking", "/api/ranking"], async (req, res) => {
     return res.status(400).json({ error: "El par\xE1metro periodo es obligatorio" });
   }
   try {
-    const pool = await sql12.connect(dbConfig12);
+    const request = pool.request();
     const querySQL = `
       SELECT 
           ISNULL(D_AS.Asesor, F.IdSAsesor) AS Asesor,
@@ -35169,7 +35423,7 @@ router13.get(["/ranking", "/api/ranking"], async (req, res) => {
           ISNULL(D_ADM.Nombre, 'Sin Administrador asignado')
       ORDER BY Operaciones DESC, Desembolsos DESC;
     `;
-    const result = await pool.request().input("periodo", sql12.VarChar(6), periodo).input("agencia", sql12.VarChar(50), agencia).input("asesor", sql12.VarChar(100), asesor).query(querySQL);
+    const result = await request.input("periodo", sql11.VarChar(6), periodo).input("agencia", sql11.VarChar(50), agencia).input("asesor", sql11.VarChar(100), asesor).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Ranking de Asesores:", error2);
@@ -35224,6 +35478,7 @@ var logger = (0, import_pino.default)({
 });
 
 // src/index.ts
+import_dotenv2.default.config();
 var rawPort = process.env["PORT"] || "3000";
 if (!rawPort) {
   throw new Error("PORT environment variable is required but was not provided.");
@@ -35232,14 +35487,18 @@ var port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
-app_default.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-  logger.info({ port }, "Server listening");
-  console.log(`\u{1F680} Backend corriendo correctamente en el puerto ${port}`);
-});
+var startServer = async () => {
+  await connectDB();
+  app_default.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+    logger.info({ port }, "Server listening");
+    console.log(`\u{1F680} Backend corriendo correctamente en el puerto ${port}`);
+  });
+};
+startServer();
 /*! Bundled license information:
 
 depd/index.js:

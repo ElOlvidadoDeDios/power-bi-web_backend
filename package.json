@@ -13,6 +13,7 @@
     "@workspace/db": "file:./lib/db",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "latest",
     "express": "^5.2.1",
     "mssql": "^12.7.0",

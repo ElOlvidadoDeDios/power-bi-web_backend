@@ -1,4 +1,5 @@
-//index.ts
+import dotenv from 'dotenv';
+dotenv.config(); // <-- Forma explícita y segura de cargar el .env
 
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -16,7 +17,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// NUEVO: Creamos una función asíncrona para iniciar todo en orden
+// Creamos una función asíncrona para iniciar todo en orden
 const startServer = async () => {
   // 1. PRIMERO nos conectamos a la Base de Datos
   await connectDB();
