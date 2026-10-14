@@ -41,7 +41,18 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual, ISNULL(MAX(TEA), 0) AS TEA 
+            SELECT 
+                IdSAsesor, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual, 
+                ISNULL(MAX(TEA), 0) AS TEA,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos 
             FROM DWH_Gestion_Cartera.dbo.fct_stock 
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
@@ -56,10 +67,21 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
             A.Asesor AS asesor, 
             A.MetaAsesor AS metaAsesor,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150, 
-            ISNULL(F.Desembolsos, 0) AS amountAchieved, ISNULL(F.Repagos, 0) AS repagos, ISNULL(S.TEA, 0) AS tea, ISNULL(F.NroOper, 0) AS opAchieved,
-            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo, ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(S.Cartera, 0) AS cartera,
-            (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual, CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
-            (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual
+            ISNULL(F.Desembolsos, 0) AS amountAchieved, 
+            ISNULL(F.Repagos, 0) AS repagos, 
+            ISNULL(S.TEA, 0) AS tea, 
+            ISNULL(F.NroOper, 0) AS opAchieved,
+            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo, 
+            ISNULL(S.SociosInicio, 0) AS sociosInicio, 
+            ISNULL(S.SociosActual, 0) AS sociosActual, 
+            ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion, 
+            ISNULL(S.SociosActivos, 0) AS sociosActivos, 
+            ISNULL(S.Cartera, 0) AS cartera,
+            (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, 
+            ISNULL(S.MoraCPP, 0) AS moraCppActual, 
+            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, 
+            ISNULL(S.MoraDeficiente, 0) AS moraDefActual
         FROM CTE_Asesores_Com A 
         LEFT JOIN CTE_Flow_Com F ON A.IdSAsesor = F.IdSAsesor 
         LEFT JOIN CTE_Stock_Com S ON A.IdSAsesor = S.IdSAsesor 

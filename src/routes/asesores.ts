@@ -25,7 +25,19 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
             GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual 
+            SELECT 
+                IdSAsesor, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
+                ISNULL(SUM(NroSociosTraspasados), 0) AS SociosTraspasados,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS SociosRecuperacion,
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock 
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
@@ -62,9 +74,16 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
             CASE WHEN ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) < 20000 THEN 20000 - ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) ELSE 0 END AS faltante20k,
             ISNULL(F.NroOper, 0) AS opAchieved,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS duracion,
+            
+            -- NUEVAS COLUMNAS DE SOCIOS
             ISNULL(S.SociosInicio, 0) AS sociosInicio,
             ISNULL(S.SociosActual, 0) AS sociosActual,
             (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
+            ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
+            ISNULL(S.SociosTraspasados, 0) AS sociosTraspasados,
+            ISNULL(S.SociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(S.SociosActivos, 0) AS sociosActivos,
+            
             ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS carteraInicio,
             ISNULL(S.MoraCPP, 0) AS moraCppActual,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,

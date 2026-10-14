@@ -34551,10 +34551,19 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
       WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
       ORDER BY [Fecha] DESC
     `);
+    const logResult = await pool.request().query(`
+      SELECT TOP (1) 
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 hh:mm tt', 'es-PE') AS UltimaActualizacion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion]
+      ORDER BY [Id] DESC
+    `);
+    const ultimaActualizacion = logResult.recordset.length > 0 ? logResult.recordset[0].UltimaActualizacion : "Desconocido";
     res.json({
       periodos: periodos.recordset.map((p) => p.Periodo),
       asesores: asesores.recordset,
-      fechas: fechas.recordset
+      fechas: fechas.recordset,
+      ultimaActualizacion
+      // Enviamos al Frontend
     });
   } catch (error2) {
     console.error("Error obteniendo filtros:", error2);
@@ -34794,7 +34803,20 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
+            SELECT 
+                IdSAgencia, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
+            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
+            GROUP BY IdSAgencia
         ),
         CTE_MetasFlow_Com AS (
             SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
@@ -34824,6 +34846,8 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
             (ISNULL(MS.MetaMoraCPP, 0.10) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual,
             (ISNULL(MS.MetaMoraDeficiente, 0.05) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
             ISNULL(F.Repagos, 0) AS repagos,
+            ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(S.SociosActivos, 0) AS sociosActivos,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
             (ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS carteraFin,
@@ -34924,7 +34948,18 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual, ISNULL(MAX(TEA), 0) AS TEA 
+            SELECT 
+                IdSAsesor, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual, 
+                ISNULL(MAX(TEA), 0) AS TEA,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos 
             FROM DWH_Gestion_Cartera.dbo.fct_stock 
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
@@ -34939,10 +34974,21 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
             A.Asesor AS asesor, 
             A.MetaAsesor AS metaAsesor,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150, 
-            ISNULL(F.Desembolsos, 0) AS amountAchieved, ISNULL(F.Repagos, 0) AS repagos, ISNULL(S.TEA, 0) AS tea, ISNULL(F.NroOper, 0) AS opAchieved,
-            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo, ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(S.Cartera, 0) AS cartera,
-            (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual, CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
-            (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual
+            ISNULL(F.Desembolsos, 0) AS amountAchieved, 
+            ISNULL(F.Repagos, 0) AS repagos, 
+            ISNULL(S.TEA, 0) AS tea, 
+            ISNULL(F.NroOper, 0) AS opAchieved,
+            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo, 
+            ISNULL(S.SociosInicio, 0) AS sociosInicio, 
+            ISNULL(S.SociosActual, 0) AS sociosActual, 
+            ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion, 
+            ISNULL(S.SociosActivos, 0) AS sociosActivos, 
+            ISNULL(S.Cartera, 0) AS cartera,
+            (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, 
+            ISNULL(S.MoraCPP, 0) AS moraCppActual, 
+            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, 
+            ISNULL(S.MoraDeficiente, 0) AS moraDefActual
         FROM CTE_Asesores_Com A 
         LEFT JOIN CTE_Flow_Com F ON A.IdSAsesor = F.IdSAsesor 
         LEFT JOIN CTE_Stock_Com S ON A.IdSAsesor = S.IdSAsesor 
@@ -35018,7 +35064,19 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
             GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual 
+            SELECT 
+                IdSAsesor, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
+                ISNULL(SUM(NroSociosTraspasados), 0) AS SociosTraspasados,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS SociosRecuperacion,
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock 
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
@@ -35055,9 +35113,16 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
             CASE WHEN ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) < 20000 THEN 20000 - ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) ELSE 0 END AS faltante20k,
             ISNULL(F.NroOper, 0) AS opAchieved,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS duracion,
+            
+            -- NUEVAS COLUMNAS DE SOCIOS
             ISNULL(S.SociosInicio, 0) AS sociosInicio,
             ISNULL(S.SociosActual, 0) AS sociosActual,
             (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
+            ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
+            ISNULL(S.SociosTraspasados, 0) AS sociosTraspasados,
+            ISNULL(S.SociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(S.SociosActivos, 0) AS sociosActivos,
+            
             ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS carteraInicio,
             ISNULL(S.MoraCPP, 0) AS moraCppActual,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
@@ -35387,47 +35452,38 @@ var avance_default = router12;
 
 // src/routes/ranking.ts
 var import_express13 = __toESM(require_express2(), 1);
-import sql11 from "mssql";
 var router13 = (0, import_express13.Router)();
 router13.get(["/ranking", "/api/ranking"], async (req, res) => {
-  const periodo = req.query.periodo || "";
-  const agencia = req.query.agencia || "";
-  const asesor = req.query.asesor || "";
-  if (!periodo) {
-    return res.status(400).json({ error: "El par\xE1metro periodo es obligatorio" });
-  }
   try {
     const request = pool.request();
     const querySQL = `
-      SELECT 
-          ISNULL(D_AS.Asesor, F.IdSAsesor) AS Asesor,
-          SUM(ISNULL(F.ColocacionNumReal, 0)) AS Operaciones,
-          SUM(ISNULL(F.ColocacionMontoReal, 0)) AS Desembolsos,
-          ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
-          ISNULL(D_ADM.Nombre, 'Sin Administrador asignado') AS Admin
-      FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
-          ON F.IdSAgencia = DA.IdSAgencia
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
-          ON F.IdSAsesor = D_AS.IdSAsesor 
-          AND F.Periodo = D_AS.Periodo
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_administrador] D_ADM
-          ON F.IdSAgencia = D_ADM.IdSAgencia 
-          AND F.Periodo = D_ADM.Periodo
-      WHERE F.Periodo = @periodo
-        AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
-        AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-      GROUP BY 
-          ISNULL(D_AS.Asesor, F.IdSAsesor),
-          ISNULL(DA.Agencia, 'Agencia Desconocida'),
-          ISNULL(D_ADM.Nombre, 'Sin Administrador asignado')
-      ORDER BY Operaciones DESC, Desembolsos DESC;
+      SELECT TOP (1000) 
+         [Fecha_Calculo],
+         [IdSAsesor],
+         [Asesor],
+         [Agencia],
+         [Operaciones],
+         [Crecimiento_Neto_150],
+         [Seguros_Vendidos],
+         [Puntos_Op],
+         [Puntos_Crec],
+         [Puntos_Seg],
+         [Puntaje_Total],
+         [Puesto_Actual],
+         [Puesto_Anterior],
+         [Comentario_Creativo]
+      FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+      WHERE CAST([Fecha_Calculo] AS DATE) = (
+          SELECT MAX(CAST([Fecha_Calculo] AS DATE)) 
+          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+      )
+      ORDER BY [Puesto_Actual] ASC;
     `;
-    const result = await request.input("periodo", sql11.VarChar(6), periodo).input("agencia", sql11.VarChar(50), agencia).input("asesor", sql11.VarChar(100), asesor).query(querySQL);
+    const result = await request.query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
-    console.error("Error obteniendo Ranking de Asesores:", error2);
-    res.status(500).json({ error: "Error al consultar la base de datos" });
+    console.error("Error obteniendo Ranking de Excelencia:", error2);
+    res.status(500).json({ error: "Error al consultar la base de datos de ranking" });
   }
 });
 var ranking_default = router13;

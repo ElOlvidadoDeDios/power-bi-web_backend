@@ -88,7 +88,20 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
         ),
         CTE_Stock_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios, ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, ISNULL(SUM(NroSocios), 0) AS SociosActual FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
+            SELECT 
+                IdSAgencia, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
+                ISNULL(SUM(NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
+                ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
+            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
+            GROUP BY IdSAgencia
         ),
         CTE_MetasFlow_Com AS (
             SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
@@ -118,6 +131,8 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
             (ISNULL(MS.MetaMoraCPP, 0.10) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual,
             (ISNULL(MS.MetaMoraDeficiente, 0.05) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
             ISNULL(F.Repagos, 0) AS repagos,
+            ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(S.SociosActivos, 0) AS sociosActivos,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
             (ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS carteraFin,

@@ -32,10 +32,24 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       ORDER BY [Fecha] DESC
     `);
 
+    // NUEVO: Obtenemos la última actualización del ETL formateada como DD/MM/YYYY · HH:MM a.m./p.m.
+    const logResult = await pool.request().query(`
+      SELECT TOP (1) 
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm tt', 'es-PE') AS UltimaActualizacion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion]
+      ORDER BY [Id] DESC
+    `);
+
+    // Valor por defecto en caso la tabla esté vacía
+    const ultimaActualizacion = logResult.recordset.length > 0 
+      ? logResult.recordset[0].UltimaActualizacion 
+      : 'Desconocido';
+
     res.json({
       periodos: periodos.recordset.map((p: any) => p.Periodo),
       asesores: asesores.recordset,
-      fechas: fechas.recordset
+      fechas: fechas.recordset,
+      ultimaActualizacion: ultimaActualizacion // Enviamos al Frontend
     });
   } catch (error) {
     console.error("Error obteniendo filtros:", error);

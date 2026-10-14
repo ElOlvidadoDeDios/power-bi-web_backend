@@ -5,53 +5,40 @@ import { pool } from "../lib/db";
 const router = Router();
 
 router.get(["/ranking", "/api/ranking"], async (req: Request, res: Response) => {
-  const periodo = req.query.periodo as string || "";
-  const agencia = req.query.agencia as string || "";
-  const asesor = req.query.asesor as string || "";
-
-  if (!periodo) {
-    return res.status(400).json({ error: "El parámetro periodo es obligatorio" });
-  }
-
   try {
     const request = pool.request();
     
+    // Obtenemos los registros correspondientes a la ÚLTIMA FECHA CALCULADA.
+    // Esto garantiza que siempre veamos el "ranking de hoy" automáticamente.
     const querySQL = `
-      SELECT 
-          ISNULL(D_AS.Asesor, F.IdSAsesor) AS Asesor,
-          SUM(ISNULL(F.ColocacionNumReal, 0)) AS Operaciones,
-          SUM(ISNULL(F.ColocacionMontoReal, 0)) AS Desembolsos,
-          ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
-          ISNULL(D_ADM.Nombre, 'Sin Administrador asignado') AS Admin
-      FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
-          ON F.IdSAgencia = DA.IdSAgencia
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
-          ON F.IdSAsesor = D_AS.IdSAsesor 
-          AND F.Periodo = D_AS.Periodo
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_administrador] D_ADM
-          ON F.IdSAgencia = D_ADM.IdSAgencia 
-          AND F.Periodo = D_ADM.Periodo
-      WHERE F.Periodo = @periodo
-        AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
-        AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-      GROUP BY 
-          ISNULL(D_AS.Asesor, F.IdSAsesor),
-          ISNULL(DA.Agencia, 'Agencia Desconocida'),
-          ISNULL(D_ADM.Nombre, 'Sin Administrador asignado')
-      ORDER BY Operaciones DESC, Desembolsos DESC;
+      SELECT TOP (1000) 
+         [Fecha_Calculo],
+         [IdSAsesor],
+         [Asesor],
+         [Agencia],
+         [Operaciones],
+         [Crecimiento_Neto_150],
+         [Seguros_Vendidos],
+         [Puntos_Op],
+         [Puntos_Crec],
+         [Puntos_Seg],
+         [Puntaje_Total],
+         [Puesto_Actual],
+         [Puesto_Anterior],
+         [Comentario_Creativo]
+      FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+      WHERE CAST([Fecha_Calculo] AS DATE) = (
+          SELECT MAX(CAST([Fecha_Calculo] AS DATE)) 
+          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+      )
+      ORDER BY [Puesto_Actual] ASC;
     `;
 
-    const result = await request
-      .input('periodo', sql.VarChar(6), periodo)
-      .input('agencia', sql.VarChar(50), agencia)
-      .input('asesor', sql.VarChar(100), asesor)
-      .query(querySQL);
-
+    const result = await request.query(querySQL);
     res.json(result.recordset);
   } catch (error) {
-    console.error("Error obteniendo Ranking de Asesores:", error);
-    res.status(500).json({ error: "Error al consultar la base de datos" });
+    console.error("Error obteniendo Ranking de Excelencia:", error);
+    res.status(500).json({ error: "Error al consultar la base de datos de ranking" });
   }
 });
 
