@@ -35505,10 +35505,125 @@ router14.use(avance_default);
 router14.use(ranking_default);
 var routes_default = router14;
 
+// src/middlewares/smartCache.ts
+var cacheETL = { version: "", store: /* @__PURE__ */ new Map() };
+var cacheDaemon = { version: "", store: /* @__PURE__ */ new Map() };
+var isChecking = false;
+var isPrewarming = false;
+var serverPort = Number(process.env.PORT) || 3032;
+async function getDWHVersions() {
+  try {
+    const result = await pool.request().query(`
+      SELECT 
+        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1), 126) AS VersionETL,
+        CONVERT(VARCHAR(30), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]), 126) AS VersionDaemon,
+        (SELECT TOP 1 CAST([Periodo] AS VARCHAR(6)) FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] ORDER BY [Periodo] DESC) AS PeriodoActual
+    `);
+    const row = result.recordset?.[0];
+    if (!row) return null;
+    return {
+      versionETL: String(row.VersionETL || "v1"),
+      versionDaemon: String(row.VersionDaemon || "v1"),
+      periodoActual: String(row.PeriodoActual || `${(/* @__PURE__ */ new Date()).getFullYear()}${String((/* @__PURE__ */ new Date()).getMonth() + 1).padStart(2, "0")}`)
+    };
+  } catch (err) {
+    console.error("\u26A0\uFE0F [SmartCache] Error leyendo sem\xE1foro SQL:", err);
+    return null;
+  }
+}
+async function prewarmHeavyRoutes(periodo, newVersionETL) {
+  if (isPrewarming) return;
+  isPrewarming = true;
+  const baseUrl = `http://localhost:${serverPort}`;
+  const routesToWarm = [
+    `/api/filtros`,
+    `/api/gerencia?periodo=${periodo}&agencia=Todas&asesor=Todos`,
+    `/api/supervision?periodo=${periodo}&agencia=Todas&asesor=Todos`,
+    `/api/agencia?periodo=${periodo}&agencia=Todas&asesor=Todos`,
+    `/api/asesores?periodo=${periodo}&agencia=Todas&asesor=Todos`,
+    `/api/colocaciones?periodo=${periodo}&agencia=Todas&asesor=Todos`,
+    `/api/diaria?periodo=${periodo}&agencia=Todas&asesor=Todos&dia=Hoy`,
+    `/api/cancelados?agencia=Todas&asesor=Todos&tipo=Todas&frecuencia=Todas`,
+    `/api/avance?agencia=Todas&asesor=Todos`,
+    `/api/ranking`
+  ];
+  console.log(`\u{1F525} [SmartCache] Pre-calentando ${routesToWarm.length} reportes en RAM para el periodo ${periodo}...`);
+  const start = Date.now();
+  try {
+    await Promise.allSettled(
+      routesToWarm.map(
+        (route) => fetch(`${baseUrl}${route}`, {
+          headers: { "x-internal-prewarm": "true" }
+        })
+      )
+    );
+    cacheETL.version = newVersionETL;
+    console.log(`\u2705 [SmartCache] RAM lista en ${((Date.now() - start) / 1e3).toFixed(2)}s. Los usuarios tendr\xE1n respuesta en 0ms.`);
+  } catch (err) {
+    console.error("\u26A0\uFE0F [SmartCache] Error en pre-calentamiento:", err);
+  } finally {
+    isPrewarming = false;
+  }
+}
+function startCacheWatcher() {
+  const checkLoop = async () => {
+    if (isChecking) return;
+    isChecking = true;
+    try {
+      const info = await getDWHVersions();
+      if (!info) return;
+      if (cacheDaemon.version !== info.versionDaemon) {
+        console.log(`\u{1F504} [SmartCache] Nuevo c\xE1lculo de Ranking detectado (${info.versionDaemon}).`);
+        cacheDaemon.store.clear();
+        cacheDaemon.version = info.versionDaemon;
+      }
+      if (cacheETL.version !== info.versionETL) {
+        console.log(`\u{1F504} [SmartCache] Nueva carga ETL detectada (${info.versionETL}). Actualizando RAM...`);
+        await prewarmHeavyRoutes(info.periodoActual, info.versionETL);
+      }
+    } finally {
+      isChecking = false;
+    }
+  };
+  setTimeout(checkLoop, 1500);
+  setInterval(checkLoop, 2e4);
+}
+async function smartCacheMiddleware(req, res, next) {
+  if (req.method !== "GET" || req.path.includes("health")) {
+    return next();
+  }
+  if (req.path.endsWith("/cache-clear")) {
+    cacheETL.store.clear();
+    cacheDaemon.store.clear();
+    return res.json({ ok: true, message: "Cach\xE9 limpiado manualmente" });
+  }
+  const isDaemonRoute = req.path.includes("ranking") || req.path.includes("preventiva");
+  const activeBucket = isDaemonRoute ? cacheDaemon : cacheETL;
+  const cacheKey = req.originalUrl;
+  const isInternalPrewarm = req.headers["x-internal-prewarm"] === "true";
+  if (!isInternalPrewarm && activeBucket.store.has(cacheKey)) {
+    res.setHeader("X-Cache", "HIT");
+    res.setHeader("X-Data-Version", activeBucket.version);
+    return res.json(activeBucket.store.get(cacheKey));
+  }
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
+      activeBucket.store.set(cacheKey, body);
+    }
+    res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : "MISS");
+    res.setHeader("X-Data-Version", activeBucket.version);
+    return originalJson(body);
+  };
+  next();
+}
+
 // src/app.ts
 var app = (0, import_express15.default)();
 app.use((0, import_cors.default)());
 app.use(import_express15.default.json());
+app.use(smartCacheMiddleware);
+startCacheWatcher();
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Servidor DWH funcionando correctamente" });
 });
