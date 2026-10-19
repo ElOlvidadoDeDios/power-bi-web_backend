@@ -34426,6 +34426,16 @@ var dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   port: parseInt(process.env.DB_PORT || "1433"),
+  connectionTimeout: 3e4,
+  requestTimeout: 6e4,
+  // 👈 Subir de 15000 (default) a 60000ms (60 seg)
+  pool: {
+    max: 30,
+    // 👈 Asegura suficientes conexiones para las 29 rutas del SmartCache
+    min: 2,
+    idleTimeoutMillis: 3e4
+  },
+  // 👈 ¡Aquí faltaba esta coma!
   options: {
     encrypt: false,
     trustServerCertificate: true
@@ -34537,6 +34547,7 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
       SELECT DISTINCT 
           [Periodo], 
           [IdSAgencia], 
+          [IdSAsesor], 
           [Asesor], 
           [AsesorNombresApellidos] 
       FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor]
@@ -35386,7 +35397,7 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
           ISNULL(C.[Telefono_celular_2], '') AS Celular2,
           ISNULL(C.[Telefono_fijo_1], '') AS TelefonoFijo1,
           ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2
-      FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C
+      FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON C.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), C.[Fecha_Cancelacion], 112)
@@ -35431,7 +35442,7 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           ISNULL(A.[Telefono 2], '') AS TelefonoFijo2,
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
           ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
-      FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A
+      FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON A.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), GETDATE(), 112)
@@ -35508,59 +35519,47 @@ var routes_default = router14;
 // src/middlewares/smartCache.ts
 var cacheETL = { version: "", store: /* @__PURE__ */ new Map() };
 var cacheDaemon = { version: "", store: /* @__PURE__ */ new Map() };
+var knownEtlRoutes = /* @__PURE__ */ new Set(["/api/filtros"]);
+var lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3e3}`;
 var isChecking = false;
 var isPrewarming = false;
-var serverPort = Number(process.env.PORT) || 3032;
 async function getDWHVersions() {
   try {
     const result = await pool.request().query(`
       SELECT 
         CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1), 126) AS VersionETL,
-        CONVERT(VARCHAR(30), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]), 126) AS VersionDaemon,
-        (SELECT TOP 1 CAST([Periodo] AS VARCHAR(6)) FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] ORDER BY [Periodo] DESC) AS PeriodoActual
+        CONVERT(VARCHAR(30), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]), 126) AS VersionDaemon
     `);
     const row = result.recordset?.[0];
     if (!row) return null;
     return {
       versionETL: String(row.VersionETL || "v1"),
-      versionDaemon: String(row.VersionDaemon || "v1"),
-      periodoActual: String(row.PeriodoActual || `${(/* @__PURE__ */ new Date()).getFullYear()}${String((/* @__PURE__ */ new Date()).getMonth() + 1).padStart(2, "0")}`)
+      versionDaemon: String(row.VersionDaemon || "v1")
     };
   } catch (err) {
     console.error("\u26A0\uFE0F [SmartCache] Error leyendo sem\xE1foro SQL:", err);
     return null;
   }
 }
-async function prewarmHeavyRoutes(periodo, newVersionETL) {
+async function refreshKnownRoutes(newVersionETL) {
   if (isPrewarming) return;
   isPrewarming = true;
-  const baseUrl = `http://localhost:${serverPort}`;
-  const routesToWarm = [
-    `/api/filtros`,
-    `/api/gerencia?periodo=${periodo}&agencia=Todas&asesor=Todos`,
-    `/api/supervision?periodo=${periodo}&agencia=Todas&asesor=Todos`,
-    `/api/agencia?periodo=${periodo}&agencia=Todas&asesor=Todos`,
-    `/api/asesores?periodo=${periodo}&agencia=Todas&asesor=Todos`,
-    `/api/colocaciones?periodo=${periodo}&agencia=Todas&asesor=Todos`,
-    `/api/diaria?periodo=${periodo}&agencia=Todas&asesor=Todos&dia=Hoy`,
-    `/api/cancelados?agencia=Todas&asesor=Todos&tipo=Todas&frecuencia=Todas`,
-    `/api/avance?agencia=Todas&asesor=Todos`,
-    `/api/ranking`
-  ];
-  console.log(`\u{1F525} [SmartCache] Pre-calentando ${routesToWarm.length} reportes en RAM para el periodo ${periodo}...`);
+  const routesToWarm = Array.from(knownEtlRoutes);
+  console.log(`\u{1F525} [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM...`);
   const start = Date.now();
   try {
+    cacheETL.store.clear();
+    cacheETL.version = newVersionETL;
     await Promise.allSettled(
       routesToWarm.map(
-        (route) => fetch(`${baseUrl}${route}`, {
+        (route) => fetch(`${lastKnownBaseUrl}${route}`, {
           headers: { "x-internal-prewarm": "true" }
         })
       )
     );
-    cacheETL.version = newVersionETL;
-    console.log(`\u2705 [SmartCache] RAM lista en ${((Date.now() - start) / 1e3).toFixed(2)}s. Los usuarios tendr\xE1n respuesta en 0ms.`);
+    console.log(`\u2705 [SmartCache] RAM actualizada en ${((Date.now() - start) / 1e3).toFixed(2)}s.`);
   } catch (err) {
-    console.error("\u26A0\uFE0F [SmartCache] Error en pre-calentamiento:", err);
+    console.error("\u26A0\uFE0F [SmartCache] Error en refresco de cach\xE9:", err);
   } finally {
     isPrewarming = false;
   }
@@ -35578,8 +35577,8 @@ function startCacheWatcher() {
         cacheDaemon.version = info.versionDaemon;
       }
       if (cacheETL.version !== info.versionETL) {
-        console.log(`\u{1F504} [SmartCache] Nueva carga ETL detectada (${info.versionETL}). Actualizando RAM...`);
-        await prewarmHeavyRoutes(info.periodoActual, info.versionETL);
+        console.log(`\u{1F504} [SmartCache] Nueva carga ETL detectada (${info.versionETL}).`);
+        await refreshKnownRoutes(info.versionETL);
       }
     } finally {
       isChecking = false;
@@ -35591,6 +35590,10 @@ function startCacheWatcher() {
 async function smartCacheMiddleware(req, res, next) {
   if (req.method !== "GET" || req.path.includes("health")) {
     return next();
+  }
+  const host = req.headers.host;
+  if (host) {
+    lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3e3}`;
   }
   if (req.path.endsWith("/cache-clear")) {
     cacheETL.store.clear();
@@ -35610,6 +35613,9 @@ async function smartCacheMiddleware(req, res, next) {
   res.json = (body) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
+      if (!isDaemonRoute) {
+        knownEtlRoutes.add(cacheKey);
+      }
     }
     res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : "MISS");
     res.setHeader("X-Data-Version", activeBucket.version);

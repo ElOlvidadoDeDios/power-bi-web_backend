@@ -25,7 +25,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           ISNULL(A.[Telefono 2], '') AS TelefonoFijo2,
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
           ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
-      FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A
+      FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON A.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), GETDATE(), 112)

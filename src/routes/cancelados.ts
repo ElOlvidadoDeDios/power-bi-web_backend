@@ -32,7 +32,7 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
           ISNULL(C.[Telefono_celular_2], '') AS Celular2,
           ISNULL(C.[Telefono_fijo_1], '') AS TelefonoFijo1,
           ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2
-      FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C
+      FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
           ON C.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), C.[Fecha_Cancelacion], 112)

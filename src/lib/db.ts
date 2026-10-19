@@ -5,12 +5,19 @@ dotenv.config();
 // 2. LUEGO importamos SQL y armamos la configuración
 import sql from 'mssql';
 
-const dbConfig = {
+const dbConfig: sql.config = {
     server: process.env.DB_SERVER || "localhost",
     database: "DWH_Gestion_Cartera",
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     port: parseInt(process.env.DB_PORT || "1433"),
+    connectionTimeout: 30000,
+    requestTimeout: 60000, // 👈 Subir de 15000 (default) a 60000ms (60 seg)
+    pool: {
+        max: 30, // 👈 Asegura suficientes conexiones para las 29 rutas del SmartCache
+        min: 2,
+        idleTimeoutMillis: 30000
+    }, // 👈 ¡Aquí faltaba esta coma!
     options: {
         encrypt: false, 
         trustServerCertificate: true

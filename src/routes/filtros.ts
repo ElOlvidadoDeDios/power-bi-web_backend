@@ -16,6 +16,7 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       SELECT DISTINCT 
           [Periodo], 
           [IdSAgencia], 
+          [IdSAsesor], 
           [Asesor], 
           [AsesorNombresApellidos] 
       FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor]
