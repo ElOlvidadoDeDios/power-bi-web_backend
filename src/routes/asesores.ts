@@ -15,12 +15,12 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
       .query(`
         WITH CTE_Asesores_Com AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor 
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
@@ -38,18 +38,18 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
                 ISNULL(SUM(NroSociosTraspasados), 0) AS SociosTraspasados,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS SociosRecuperacion,
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
         CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Com AS (

@@ -28978,6 +28978,33 @@ var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
 var import_express15 = __toESM(require_express2(), 1);
+
+// src/middlewares/errorHandler.ts
+var errorHandler = (err, req, res, next) => {
+  console.error(`[Error Middleware] Ruta: ${req.method} ${req.originalUrl} | Mensaje:`, err);
+  if (err.code === "ETIMEOUT" || err.number === -2) {
+    return res.status(504).json({
+      success: false,
+      error: "Gateway Timeout",
+      message: "La base de datos ha tardado demasiado en responder. Por favor, intente nuevamente en unos momentos."
+    });
+  }
+  if (err.code === "EREQUEST" || err.number === 102) {
+    return res.status(400).json({
+      success: false,
+      error: "Bad Request",
+      message: "Error en la estructura de la consulta a la base de datos.",
+      detail: process.env.NODE_ENV === "development" ? err.message : void 0
+    });
+  }
+  return res.status(500).json({
+    success: false,
+    error: "Internal Server Error",
+    message: "Ocurri\xF3 un error interno en el servidor al procesar su solicitud."
+  });
+};
+
+// src/app.ts
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
@@ -34503,18 +34530,18 @@ router2.get("/api/gestion-preventiva", async (_req, res) => {
               T_PER.RAZON AS [analista],
               CONVERT(VARCHAR(10), P.FECHA_VCMTO, 103) AS [fecha_vencimiento],
               DATEDIFF(day, GETDATE(), P.FECHA_VCMTO) AS [dias_para_vencimiento]
-          FROM PREEC C
-          INNER JOIN SOCIOS S ON C.CUENTA = S.CUENTA
-          INNER JOIN PRESTAMO P ON C.PAGARE = P.PAGARE
-          LEFT JOIN TIPOPROD TP ON C.TIPO_PROD = TP.TIPO_PROD
-          INNER JOIN SEGURIDAD.DBO.ANAREC T_ANA ON T_ANA.ID_ANAREC = C.ID_ANA AND T_ANA.FLAG_ANAREC = 'A'
-          INNER JOIN SEGURIDAD.dbo.USUARIOS T_USU ON T_USU.ID_USER = T_ANA.ID_USER
-          INNER JOIN SEGURIDAD.dbo.GRUPOUSER T_GRU ON T_GRU.ID_GRUPO = T_USU.ID_GRUPO AND T_GRU.NOM_GRUPO = 'CREDITOS'
-          INNER JOIN SEGURIDAD.dbo.PERSONAL T_PER ON T_PER.DNI = T_USU.DNI
-          INNER JOIN SEGURIDAD.dbo.TCARGO_USER T_CAR ON T_CAR.ID_CARGO = T_PER.ID_CARGO
+          FROM PREEC C WITH (NOLOCK)
+          INNER JOIN SOCIOS S WITH (NOLOCK) ON C.CUENTA = S.CUENTA
+          INNER JOIN PRESTAMO P WITH (NOLOCK) ON C.PAGARE = P.PAGARE
+          LEFT JOIN TIPOPROD TP WITH (NOLOCK) ON C.TIPO_PROD = TP.TIPO_PROD
+          INNER JOIN SEGURIDAD.DBO.ANAREC T_ANA WITH (NOLOCK) ON T_ANA.ID_ANAREC = C.ID_ANA AND T_ANA.FLAG_ANAREC = 'A'
+          INNER JOIN SEGURIDAD.dbo.USUARIOS T_USU WITH (NOLOCK) ON T_USU.ID_USER = T_ANA.ID_USER
+          INNER JOIN SEGURIDAD.dbo.GRUPOUSER T_GRU WITH (NOLOCK) ON T_GRU.ID_GRUPO = T_USU.ID_GRUPO AND T_GRU.NOM_GRUPO = 'CREDITOS'
+          INNER JOIN SEGURIDAD.dbo.PERSONAL T_PER WITH (NOLOCK) ON T_PER.DNI = T_USU.DNI
+          INNER JOIN SEGURIDAD.dbo.TCARGO_USER T_CAR WITH (NOLOCK) ON T_CAR.ID_CARGO = T_PER.ID_CARGO
           WHERE 
               C.PERIODO = CONVERT(VARCHAR(6), GETDATE(), 112)
-              AND C.SALDO_PRES > 0             
+              AND C.SALDO_PRES > 0            
               AND P.SALDO_PRES > 0  
               AND P.FECHA_VCMTO >= CAST(GETDATE() AS DATE)
               AND P.FECHA_VCMTO <= DATEADD(day, 5, CAST(GETDATE() AS DATE))
@@ -34539,7 +34566,7 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
   try {
     const periodos = await pool.request().query(`
       SELECT DISTINCT [Periodo] 
-      FROM [dm_productividad].[dbo].[dim_calendario] 
+      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
       WHERE [Periodo] IS NOT NULL
       ORDER BY [Periodo] DESC
     `);
@@ -34550,7 +34577,7 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
           [IdSAsesor], 
           [Asesor], 
           [AsesorNombresApellidos] 
-      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor]
+      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
       WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
     `);
     const fechas = await pool.request().query(`
@@ -34558,14 +34585,14 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
           [Periodo], 
           CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
           CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
-      FROM [dm_productividad].[dbo].[dim_calendario]
+      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
       WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
       ORDER BY [Fecha] DESC
     `);
     const logResult = await pool.request().query(`
       SELECT TOP (1) 
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 hh:mm tt', 'es-PE') AS UltimaActualizacion
-      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion]
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
       ORDER BY [Id] DESC
     `);
     const ultimaActualizacion = logResult.recordset.length > 0 ? logResult.recordset[0].UltimaActualizacion : "Desconocido";
@@ -34600,7 +34627,7 @@ router4.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async 
         -- 2. Buscamos el \xFAltimo d\xEDa del mes (EndDate DAX)
         DECLARE @EndDate DATE;
         SELECT @EndDate = MAX(Fecha) 
-        FROM [dm_productividad].[dbo].[dim_calendario] 
+        FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
         WHERE Periodo = @periodo;
 
         -- 3. Definimos la regla de Corte Base
@@ -34617,18 +34644,18 @@ router4.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async 
         ELSE
             SET @CorteExacto = @CorteBase;
 
-        -- 5. Calculamos usando las variables en duro
+        -- 5. Calculamos usando las variables
         SELECT 
             -- D\xEDas totales del mes que no son domingos ni feriados
             (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] 
+             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
              WHERE Periodo = @periodo 
                AND EsDomingo = 0 
                AND EsFeriado = 0) AS totales,
                
             -- D\xEDas transcurridos hasta el corte
             (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] 
+             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
              WHERE Periodo = @periodo 
                AND Fecha <= @CorteExacto 
                AND EsDomingo = 0 
@@ -34636,12 +34663,12 @@ router4.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async 
                
             -- D\xEDas restantes (Totales - Transcurridos)
             ((SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] 
+              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
               WHERE Periodo = @periodo 
                 AND EsDomingo = 0 
                 AND EsFeriado = 0) - 
              (SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] 
+              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
               WHERE Periodo = @periodo 
                 AND Fecha <= @CorteExacto 
                 AND EsDomingo = 0 
@@ -34668,23 +34695,23 @@ router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:perio
         -- QUERY 1: CARTERA COMERCIAL (Excluyendo Recuperadores)
         -- =================================================================
         WITH CTE_Asesores_Comercial AS (
-            SELECT IdSAsesor FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            SELECT IdSAsesor FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow AS (
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
         ),
         CTE_Stock AS (
             SELECT IdSAgencia, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
         ),
         CTE_MetasFlow AS (
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumMeta), 0) AS MetaOperacionesBase, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones, ISNULL(SUM(ColocacionMontoMeta), 0) AS MetaMontoBase, ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS MetaMonto
-            FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock AS (
             SELECT IdSAgencia, ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         )
         SELECT 
             CASE ISNULL(COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia), '99') WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
@@ -34704,13 +34731,13 @@ router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:perio
         -- QUERY 2: CARTERA DE NORMALIZACI\xD3N (Solo Recuperadores, por Asesor)
         -- =================================================================
         WITH CTE_Recuperadores AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         )
         SELECT 
             CASE R.IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
@@ -34719,9 +34746,10 @@ router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:perio
             (0 - ISNULL(F.Repagos, 0)) - ISNULL(S.MoraDeficiente, 0) AS crecNeto30
         FROM CTE_Recuperadores R LEFT JOIN CTE_Flow_Rec F ON R.IdSAsesor = F.IdSAsesor LEFT JOIN CTE_Stock_Rec S ON R.IdSAsesor = S.IdSAsesor ORDER BY cartera DESC;
       `);
+    const recordsets = result.recordsets;
     res.json({
-      comercial: result.recordsets[0],
-      normalizacion: result.recordsets[1]
+      comercial: recordsets[0],
+      normalizacion: recordsets[1]
     });
   } catch (error2) {
     console.error("Error obteniendo Indicadores Gerenciales:", error2);
@@ -34744,13 +34772,13 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
         -- =================================================================
         WITH CTE_CarteraInic_All AS (
             SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
+            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
             WHERE A.Periodo = @periodo
             GROUP BY DA.IdSAgencia
         ),
         CTE_Flow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Stock_All AS (
             SELECT 
@@ -34762,13 +34790,13 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(S.Varios), 0) AS Varios, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSociosAnterior ELSE 0 END), 0) AS SociosInicio, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSocios ELSE 0 END), 0) AS SociosActual
-            FROM DWH_Gestion_Cartera.dbo.fct_stock S
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor A ON S.IdSAsesor = A.IdSAsesor AND S.Periodo = A.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor A WITH (NOLOCK) ON S.IdSAsesor = A.IdSAsesor AND S.Periodo = A.Periodo
             WHERE S.Periodo = @periodo 
             GROUP BY S.IdSAgencia
         ),
         CTE_MetasFlow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock_All AS (
             SELECT 
@@ -34776,15 +34804,15 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
                 ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
                 ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M 
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
             LEFT JOIN CTE_CarteraInic_All CI ON M.IdSAgencia = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
             GROUP BY M.IdSAgencia
         ),
         CTE_TEA_All AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia, IdSAsesor) F
+            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
@@ -34802,16 +34830,16 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
         -- =================================================================
         WITH CTE_CarteraInic_Comercial AS (
             SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
+            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
             WHERE A.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
             GROUP BY DA.IdSAgencia
         ),
         CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            SELECT IdSAsesor, IdSAgencia FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
         ),
         CTE_Stock_Com AS (
             SELECT 
@@ -34825,12 +34853,12 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(NroSocios), 0) AS SociosActual,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
             GROUP BY IdSAgencia
         ),
         CTE_MetasFlow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock_Com AS (
             SELECT 
@@ -34838,15 +34866,15 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
                 ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
                 ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M 
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
             LEFT JOIN CTE_CarteraInic_Comercial CI ON M.IdSAgencia = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
             GROUP BY M.IdSAgencia
         ),
         CTE_TEA_Com AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia, IdSAsesor) F
+            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
@@ -34872,24 +34900,24 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Rec_List AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador 
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
             SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Rec AS (
             SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
@@ -34911,10 +34939,11 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
         LEFT JOIN CTE_MetasStock_Rec MS ON R.IdSAsesor = MS.IdSAsesor
         ORDER BY moraCppActual DESC;
       `);
+    const recordsets = result.recordsets;
     res.json({
-      completa: result.recordsets[0],
-      comercial: result.recordsets[1],
-      recuperacion: result.recordsets[2]
+      completa: recordsets[0],
+      comercial: recordsets[1],
+      recuperacion: recordsets[2]
     });
   } catch (error2) {
     console.error("Error obteniendo Supervisi\xF3n:", error2);
@@ -34940,22 +34969,22 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Asesores_Com AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor, ISNULL(ColocacionNumMeta, 30) AS MetaAsesor
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
@@ -34971,7 +35000,7 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
                 ISNULL(MAX(TEA), 0) AS TEA,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos 
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Com AS (
@@ -35011,20 +35040,20 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Rec_List AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Rec AS (
             SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
@@ -35044,9 +35073,14 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         SELECT 
             CASE IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS opTarget
-        FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia;
+        FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia;
       `);
-    res.json({ comercial: result.recordsets[0], recuperacion: result.recordsets[1], resumen: result.recordsets[2] });
+    const recordsets = result.recordsets;
+    res.json({
+      comercial: recordsets[0],
+      recuperacion: recordsets[1],
+      resumen: recordsets[2]
+    });
   } catch (error2) {
     console.error("Error obteniendo Agencia:", error2);
     res.status(500).json({ error: "Error calculando detalle de agencia" });
@@ -35065,12 +35099,12 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
     const result = await request.input("periodo", sql6.VarChar(6), periodo).query(`
         WITH CTE_Asesores_Com AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor 
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
@@ -35088,18 +35122,18 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
                 ISNULL(SUM(NroSociosTraspasados), 0) AS SociosTraspasados,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS SociosRecuperacion,
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo 
             GROUP BY IdSAsesor
         ),
         CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Com AS (
@@ -35186,27 +35220,27 @@ router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
                 END CATCH
             END
         
-        IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate)
+        IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate)
         BEGIN
             SELECT TOP 1 @TargetDate = Fecha 
-            FROM dm_productividad.dbo.FctDiario_MetaProy 
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK)
             WHERE YEAR(Fecha)*100 + MONTH(Fecha) = CAST(@periodo AS INT)
             ORDER BY Fecha DESC;
         END
 
         -- 1. Resumen por Agencias
         ;WITH CTE_Agencias AS (
-            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo
+            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo
         ),
         CTE_MetasProy AS (
             SELECT IdSAgencia, ColocacionNumMeta, ColocacionNumProy, ColocacionMontoMeta, ColocacionMontoProy
-            FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate
         ),
         CTE_Logrado AS (
             SELECT IdSAgencia, 
                    ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
                    ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
-            FROM DWH_Gestion_Cartera.dbo.fct_flow
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @TargetDate
             GROUP BY IdSAgencia
         )
@@ -35241,16 +35275,17 @@ router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
             ISNULL(SUM(F.ColocacionNumReal), 0) AS operations,
             ISNULL(SUM(F.ColocacionMontoReal), 0) AS disbursements,
             @TargetDate AS fechaConsultada
-        FROM DWH_Gestion_Cartera.dbo.dim_asesor DA
-        LEFT JOIN DWH_Gestion_Cartera.dbo.fct_flow F ON DA.IdSAsesor = F.IdSAsesor AND F.Periodo = @periodo AND CAST(F.Fecha AS DATE) = @TargetDate
+        FROM DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK)
+        LEFT JOIN DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK) ON DA.IdSAsesor = F.IdSAsesor AND F.Periodo = @periodo AND CAST(F.Fecha AS DATE) = @TargetDate
         WHERE DA.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
         GROUP BY DA.AsesorNombresApellidos, DA.IdSAgencia
         ORDER BY operations DESC, disbursements DESC;
       `);
+    const recordsets = result.recordsets;
     res.json({
-      agencias: result.recordsets[0],
-      asesores: result.recordsets[1],
-      fechaConsultada: result.recordsets[1][0]?.fechaConsultada || /* @__PURE__ */ new Date()
+      agencias: recordsets[0],
+      asesores: recordsets[1],
+      fechaConsultada: recordsets[1]?.[0]?.fechaConsultada || /* @__PURE__ */ new Date()
     });
   } catch (error2) {
     console.error("Error obteniendo Productividad Diaria:", error2);
@@ -35264,11 +35299,13 @@ var import_express10 = __toESM(require_express2(), 1);
 import sql8 from "mssql";
 var router10 = (0, import_express10.Router)();
 router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
-  const agencia = req.query.agencia || "";
-  const asesor = req.query.asesor || "";
+  const agenciaParam = req.query.agencia || "";
+  const asesorParam = req.query.asesor || "";
   const granularidad = req.query.granularidad || "Mensual";
   const desde = req.query.desde;
   const hasta = req.query.hasta;
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
+  const asesor = asesorParam === "Todos" ? "" : asesorParam;
   try {
     const request = pool.request();
     let querySQL = "";
@@ -35276,7 +35313,7 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
       querySQL = `
         WITH Calendario AS (
             SELECT DISTINCT Periodo, MAX(MesLargo + ' ' + CAST(A\xF1o AS VARCHAR)) AS Etiqueta
-            FROM dm_productividad.dbo.dim_calendario
+            FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
             WHERE Periodo >= @desde AND Periodo <= @hasta
             GROUP BY Periodo
         ),
@@ -35289,10 +35326,10 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
                 ISNULL(MAX(M.ColocacionMontoMetaAjus), ISNULL(MAX(M.ColocacionMontoMeta), 0)) AS ColocacionMetaMonto,
                 ISNULL(MAX(M.ColocacionNumMetaAjus), ISNULL(MAX(M.ColocacionNumMeta), 0)) AS ColocacionMetaNumAgencia,
                 ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
-            FROM DWH_Gestion_Cartera.dbo.fct_flow F
-            LEFT JOIN dm_productividad.dbo.FctMensual M ON F.Periodo = M.Periodo AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
+            LEFT JOIN dm_productividad.dbo.FctMensual M WITH (NOLOCK) ON F.Periodo = M.Periodo AND F.IdSAgencia = M.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY F.Periodo
@@ -35300,9 +35337,9 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
         Stock AS (
             SELECT 
                 S.Periodo, SUM(S.Cartera) AS CarteraTotal, SUM(S.Mora31) AS Mora31Total
-            FROM DWH_Gestion_Cartera.dbo.fct_stock S
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON S.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON S.IdSAsesor = D_AS.IdSAsesor AND S.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON S.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON S.IdSAsesor = D_AS.IdSAsesor AND S.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY S.Periodo
@@ -35325,7 +35362,7 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
       querySQL = `
         WITH Calendario AS (
             SELECT DISTINCT Fecha, CAST(DAY(Fecha) AS VARCHAR) + ' ' + LEFT(Mes, 3) AS Etiqueta
-            FROM dm_productividad.dbo.dim_calendario
+            FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
             WHERE Fecha >= @desde AND Fecha <= @hasta
         ),
         Flow AS (
@@ -35337,10 +35374,10 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
                 ISNULL(MAX(M.ColocacionMontoMeta), 0) AS ColocacionMetaMonto,
                 ISNULL(MAX(M.ColocacionNumMeta), 0) AS ColocacionMetaNumAgencia,
                 ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
-            FROM DWH_Gestion_Cartera.dbo.fct_flow F
-            LEFT JOIN dm_productividad.dbo.FctDiario_MetaProy M ON F.Fecha = M.Fecha AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
+            LEFT JOIN dm_productividad.dbo.FctDiario_MetaProy M WITH (NOLOCK) ON F.Fecha = M.Fecha AND F.IdSAgencia = M.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY F.Fecha
@@ -35372,10 +35409,18 @@ var import_express11 = __toESM(require_express2(), 1);
 import sql9 from "mssql";
 var router11 = (0, import_express11.Router)();
 router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
-  const agencia = req.query.agencia || "";
-  const asesor = req.query.asesor || "";
-  const tipoCancelacion = req.query.tipo || "";
-  const frecuencia = req.query.frecuencia || "";
+  const agenciaParam = req.query.agencia || "";
+  const asesorParam = req.query.asesor || "";
+  const tipoParam = req.query.tipo || "";
+  const frecuenciaParam = req.query.frecuencia || "";
+  const vista = (req.query.vista || "comercial").toLowerCase();
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.max(parseInt(req.query.limit) || 100, 1);
+  const offset = (page - 1) * limit;
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim();
+  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
+  const tipoCancelacion = tipoParam === "Todas" ? "" : tipoParam.trim();
+  const frecuencia = frecuenciaParam === "Todas" ? "" : frecuenciaParam.trim();
   try {
     const request = pool.request();
     const querySQL = `
@@ -35398,20 +35443,31 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
           ISNULL(C.[Telefono_fijo_1], '') AS TelefonoFijo1,
           ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2
       FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C WITH (NOLOCK)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON C.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), C.[Fecha_Cancelacion], 112)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
           ON D_AS.IdSAgencia = DA.IdSAgencia
       WHERE C.[Fecha_Cancelacion] >= DATEADD(month, -6, GETDATE()) 
         AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
-        AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
+        AND (
+          @asesor = '' 
+          OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor 
+          OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor
+          OR RTRIM(LTRIM(C.IdSAsesor)) = @asesor
+        )
         AND (@tipoCancelacion = '' OR C.[Tipo_Cancelacion] = @tipoCancelacion)
         AND (@frecuencia = '' OR C.[Tipo_Frecuencia] = @frecuencia)
-      ORDER BY C.[Fecha_Cancelacion] DESC;
+        AND (
+          (@vista = 'comercial' AND DA.Agencia IS NOT NULL AND DA.Agencia NOT IN ('Agencia Desconocida', 'NULL'))
+          OR
+          (@vista = 'recuperacion' AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL')))
+        )
+      ORDER BY C.[Fecha_Cancelacion] DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
-    const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("tipoCancelacion", sql9.VarChar(50), tipoCancelacion).input("frecuencia", sql9.VarChar(50), frecuencia).query(querySQL);
-    res.json(result.recordset);
+    const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("tipoCancelacion", sql9.VarChar(50), tipoCancelacion).input("frecuencia", sql9.VarChar(50), frecuencia).input("vista", sql9.VarChar(20), vista).input("offset", sql9.Int, offset).input("limit", sql9.Int, limit).query(querySQL);
+    res.json(result.recordset || []);
   } catch (error2) {
     console.error("Error obteniendo Cr\xE9ditos Cancelados:", error2);
     res.status(500).json({ error: "Error al consultar la base de datos" });
@@ -35424,10 +35480,17 @@ var import_express12 = __toESM(require_express2(), 1);
 import sql10 from "mssql";
 var router12 = (0, import_express12.Router)();
 router12.get(["/avance", "/api/avance"], async (req, res) => {
-  const agencia = req.query.agencia || "";
-  const asesor = req.query.asesor || "";
+  const agenciaParam = req.query.agencia || "";
+  const asesorParam = req.query.asesor || "";
+  const vista = req.query.vista || "comercial";
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 100;
+  const offset = (page - 1) * limit;
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
+  const asesor = asesorParam === "Todos" ? "" : asesorParam;
   try {
     const request = pool.request();
+    const filtroVistaSQL = vista === "comercial" ? `AND DA.Agencia IS NOT NULL AND DA.Agencia NOT IN ('Agencia Desconocida', 'NULL')` : `AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL'))`;
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -35443,16 +35506,18 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
           ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
       FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON A.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), GETDATE(), 112)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
           ON D_AS.IdSAgencia = DA.IdSAgencia
       WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-      ORDER BY A.[Avance Cartera] DESC;
+        ${filtroVistaSQL}
+      ORDER BY A.[Avance Cartera] DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
-    const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).query(querySQL);
+    const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).input("offset", sql10.Int, offset).input("limit", sql10.Int, limit).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Avance de Cartera:", error2);
@@ -35464,29 +35529,29 @@ var avance_default = router12;
 // src/routes/ranking.ts
 var import_express13 = __toESM(require_express2(), 1);
 var router13 = (0, import_express13.Router)();
-router13.get(["/ranking", "/api/ranking"], async (req, res) => {
+router13.get(["/ranking", "/api/ranking"], async (_req, res) => {
   try {
     const request = pool.request();
     const querySQL = `
       SELECT TOP (1000) 
-         [Fecha_Calculo],
-         [IdSAsesor],
-         [Asesor],
-         [Agencia],
-         [Operaciones],
-         [Crecimiento_Neto_150],
-         [Seguros_Vendidos],
-         [Puntos_Op],
-         [Puntos_Crec],
-         [Puntos_Seg],
-         [Puntaje_Total],
-         [Puesto_Actual],
-         [Puesto_Anterior],
-         [Comentario_Creativo]
-      FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+          [Fecha_Calculo],
+          [IdSAsesor],
+          [Asesor],
+          [Agencia],
+          [Operaciones],
+          [Crecimiento_Neto_150],
+          [Seguros_Vendidos],
+          [Puntos_Op],
+          [Puntos_Crec],
+          [Puntos_Seg],
+          [Puntaje_Total],
+          [Puesto_Actual],
+          [Puesto_Anterior],
+          [Comentario_Creativo]
+      FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
       WHERE CAST([Fecha_Calculo] AS DATE) = (
           SELECT MAX(CAST([Fecha_Calculo] AS DATE)) 
-          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]
+          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
       )
       ORDER BY [Puesto_Actual] ASC;
     `;
@@ -35541,22 +35606,30 @@ async function getDWHVersions() {
     return null;
   }
 }
+async function runInBatches(items, batchSize, fn) {
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    await Promise.allSettled(
+      batch.map((item) => fn(item).catch((err) => {
+        console.error(`[SmartCache] Error refrescando ruta individual:`, err?.message || err);
+      }))
+    );
+  }
+}
 async function refreshKnownRoutes(newVersionETL) {
   if (isPrewarming) return;
   isPrewarming = true;
   const routesToWarm = Array.from(knownEtlRoutes);
-  console.log(`\u{1F525} [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM...`);
+  console.log(`\u{1F525} [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM de forma controlada...`);
   const start = Date.now();
   try {
     cacheETL.store.clear();
     cacheETL.version = newVersionETL;
-    await Promise.allSettled(
-      routesToWarm.map(
-        (route) => fetch(`${lastKnownBaseUrl}${route}`, {
-          headers: { "x-internal-prewarm": "true" }
-        })
-      )
-    );
+    await runInBatches(routesToWarm, 5, async (route) => {
+      await fetch(`${lastKnownBaseUrl}${route}`, {
+        headers: { "x-internal-prewarm": "true" }
+      });
+    });
     console.log(`\u2705 [SmartCache] RAM actualizada en ${((Date.now() - start) / 1e3).toFixed(2)}s.`);
   } catch (err) {
     console.error("\u26A0\uFE0F [SmartCache] Error en refresco de cach\xE9:", err);
@@ -35626,6 +35699,7 @@ async function smartCacheMiddleware(req, res, next) {
 
 // src/app.ts
 var app = (0, import_express15.default)();
+app.set("etag", false);
 app.use((0, import_cors.default)());
 app.use(import_express15.default.json());
 app.use(smartCacheMiddleware);
@@ -35634,6 +35708,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Servidor DWH funcionando correctamente" });
 });
 app.use("/api", routes_default);
+app.use(errorHandler);
 var app_default = app;
 
 // src/lib/logger.ts

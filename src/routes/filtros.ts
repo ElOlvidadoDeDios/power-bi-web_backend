@@ -7,7 +7,7 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
   try {
     const periodos = await pool.request().query(`
       SELECT DISTINCT [Periodo] 
-      FROM [dm_productividad].[dbo].[dim_calendario] 
+      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
       WHERE [Periodo] IS NOT NULL
       ORDER BY [Periodo] DESC
     `);
@@ -19,7 +19,7 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
           [IdSAsesor], 
           [Asesor], 
           [AsesorNombresApellidos] 
-      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor]
+      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
       WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
     `);
 
@@ -28,16 +28,16 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
           [Periodo], 
           CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
           CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
-      FROM [dm_productividad].[dbo].[dim_calendario]
+      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
       WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
       ORDER BY [Fecha] DESC
     `);
 
-    // NUEVO: Obtenemos la última actualización del ETL formateada como DD/MM/YYYY · HH:MM a.m./p.m.
+    // Obtenemos la última actualización del ETL formateada como DD/MM/YYYY · HH:MM a.m./p.m.
     const logResult = await pool.request().query(`
       SELECT TOP (1) 
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm tt', 'es-PE') AS UltimaActualizacion
-      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion]
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
       ORDER BY [Id] DESC
     `);
 

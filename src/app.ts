@@ -1,11 +1,13 @@
 //app.ts
 
 import express from 'express';
+import { errorHandler } from './middlewares/errorHandler';
 import cors from 'cors';
 import routes from './routes'; // Importa el enrutador que tienes en la carpeta routes
 import { smartCacheMiddleware, startCacheWatcher } from "./middlewares/smartCache";
 
 const app = express();
+app.set('etag', false);
 
 // Configuración de middlewares
 app.use(cors());
@@ -21,5 +23,7 @@ app.get('/health', (req, res) => {
 
 // Conectar todas tus rutas modulares bajo el prefijo /api
 app.use('/api', routes);
+
+app.use(errorHandler);
 
 export default app;

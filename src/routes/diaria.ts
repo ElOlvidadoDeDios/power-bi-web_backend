@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import sql from "mssql";
-import { pool } from "../lib/db";
+import { pool } from '../lib/db';
 
 const router = Router();
 
@@ -32,27 +32,27 @@ router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, re
                 END CATCH
             END
         
-        IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate)
+        IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate)
         BEGIN
             SELECT TOP 1 @TargetDate = Fecha 
-            FROM dm_productividad.dbo.FctDiario_MetaProy 
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK)
             WHERE YEAR(Fecha)*100 + MONTH(Fecha) = CAST(@periodo AS INT)
             ORDER BY Fecha DESC;
         END
 
         -- 1. Resumen por Agencias
         ;WITH CTE_Agencias AS (
-            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo
+            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo
         ),
         CTE_MetasProy AS (
             SELECT IdSAgencia, ColocacionNumMeta, ColocacionNumProy, ColocacionMontoMeta, ColocacionMontoProy
-            FROM dm_productividad.dbo.FctDiario_MetaProy WHERE Fecha = @TargetDate
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate
         ),
         CTE_Logrado AS (
             SELECT IdSAgencia, 
                    ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
                    ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
-            FROM DWH_Gestion_Cartera.dbo.fct_flow
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @TargetDate
             GROUP BY IdSAgencia
         )
@@ -87,17 +87,20 @@ router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, re
             ISNULL(SUM(F.ColocacionNumReal), 0) AS operations,
             ISNULL(SUM(F.ColocacionMontoReal), 0) AS disbursements,
             @TargetDate AS fechaConsultada
-        FROM DWH_Gestion_Cartera.dbo.dim_asesor DA
-        LEFT JOIN DWH_Gestion_Cartera.dbo.fct_flow F ON DA.IdSAsesor = F.IdSAsesor AND F.Periodo = @periodo AND CAST(F.Fecha AS DATE) = @TargetDate
+        FROM DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK)
+        LEFT JOIN DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK) ON DA.IdSAsesor = F.IdSAsesor AND F.Periodo = @periodo AND CAST(F.Fecha AS DATE) = @TargetDate
         WHERE DA.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
         GROUP BY DA.AsesorNombresApellidos, DA.IdSAgencia
         ORDER BY operations DESC, disbursements DESC;
       `);
 
+    // 💡 Tipado seguro para evitar errores de índice en TS
+    const recordsets = result.recordsets as unknown as any[];
+
     res.json({
-        agencias: result.recordsets[0],
-        asesores: result.recordsets[1],
-        fechaConsultada: result.recordsets[1][0]?.fechaConsultada || new Date()
+        agencias: recordsets[0],
+        asesores: recordsets[1],
+        fechaConsultada: recordsets[1]?.[0]?.fechaConsultada || new Date()
     });
   } catch (error) {
     console.error("Error obteniendo Productividad Diaria:", error);

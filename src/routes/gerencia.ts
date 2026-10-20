@@ -17,23 +17,23 @@ router.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:period
         -- QUERY 1: CARTERA COMERCIAL (Excluyendo Recuperadores)
         -- =================================================================
         WITH CTE_Asesores_Comercial AS (
-            SELECT IdSAsesor FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            SELECT IdSAsesor FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow AS (
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
         ),
         CTE_Stock AS (
             SELECT IdSAgencia, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
         ),
         CTE_MetasFlow AS (
             SELECT IdSAgencia, ISNULL(SUM(ColocacionNumMeta), 0) AS MetaOperacionesBase, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones, ISNULL(SUM(ColocacionMontoMeta), 0) AS MetaMontoBase, ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS MetaMonto
-            FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock AS (
             SELECT IdSAgencia, ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         )
         SELECT 
             CASE ISNULL(COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia), '99') WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
@@ -53,13 +53,13 @@ router.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:period
         -- QUERY 2: CARTERA DE NORMALIZACIÓN (Solo Recuperadores, por Asesor)
         -- =================================================================
         WITH CTE_Recuperadores AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         )
         SELECT 
             CASE R.IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
@@ -69,9 +69,11 @@ router.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:period
         FROM CTE_Recuperadores R LEFT JOIN CTE_Flow_Rec F ON R.IdSAsesor = F.IdSAsesor LEFT JOIN CTE_Stock_Rec S ON R.IdSAsesor = S.IdSAsesor ORDER BY cartera DESC;
       `);
 
+    const recordsets = result.recordsets as unknown as any[];
+
     res.json({
-        comercial: result.recordsets[0],
-        normalizacion: result.recordsets[1]
+        comercial: recordsets[0],
+        normalizacion: recordsets[1]
     });
   } catch (error) {
     console.error("Error obteniendo Indicadores Gerenciales:", error);

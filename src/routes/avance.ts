@@ -5,12 +5,24 @@ import { pool } from "../lib/db";
 const router = Router();
 
 router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
-  const agencia = req.query.agencia as string || "";
-  const asesor = req.query.asesor as string || "";
+  const agenciaParam = req.query.agencia as string || "";
+  const asesorParam = req.query.asesor as string || "";
+  const vista = req.query.vista as string || "comercial"; // 'comercial' o 'recuperacion'
+  
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 100; // Por defecto 100
+  const offset = (page - 1) * limit;
+
+  const agencia = (agenciaParam === "Todas" || agenciaParam === "Todas las Agencias") ? "" : agenciaParam;
+  const asesor = (asesorParam === "Todos") ? "" : asesorParam;
 
   try {
     const request = pool.request();
     
+    const filtroVistaSQL = vista === 'comercial' 
+      ? `AND DA.Agencia IS NOT NULL AND DA.Agencia NOT IN ('Agencia Desconocida', 'NULL')`
+      : `AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL'))`;
+
     const querySQL = `
       SELECT 
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
@@ -26,19 +38,23 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
           ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
       FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON A.IdSAsesor = D_AS.IdSAsesor 
           AND D_AS.Periodo = CONVERT(VARCHAR(6), GETDATE(), 112)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA 
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
           ON D_AS.IdSAgencia = DA.IdSAgencia
       WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-      ORDER BY A.[Avance Cartera] DESC;
+        ${filtroVistaSQL}
+      ORDER BY A.[Avance Cartera] DESC
+      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
 
     const result = await request
       .input('agencia', sql.VarChar(50), agencia)
       .input('asesor', sql.VarChar(100), asesor)
+      .input('offset', sql.Int, offset)
+      .input('limit', sql.Int, limit)
       .query(querySQL);
 
     res.json(result.recordset);

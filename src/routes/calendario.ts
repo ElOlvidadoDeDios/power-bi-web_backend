@@ -21,7 +21,7 @@ router.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (
         -- 2. Buscamos el último día del mes (EndDate DAX)
         DECLARE @EndDate DATE;
         SELECT @EndDate = MAX(Fecha) 
-        FROM [dm_productividad].[dbo].[dim_calendario] 
+        FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
         WHERE Periodo = @periodo;
 
         -- 3. Definimos la regla de Corte Base
@@ -38,18 +38,18 @@ router.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (
         ELSE
             SET @CorteExacto = @CorteBase;
 
-        -- 5. Calculamos usando las variables en duro
+        -- 5. Calculamos usando las variables
         SELECT 
             -- Días totales del mes que no son domingos ni feriados
             (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] 
+             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
              WHERE Periodo = @periodo 
                AND EsDomingo = 0 
                AND EsFeriado = 0) AS totales,
                
             -- Días transcurridos hasta el corte
             (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] 
+             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
              WHERE Periodo = @periodo 
                AND Fecha <= @CorteExacto 
                AND EsDomingo = 0 
@@ -57,12 +57,12 @@ router.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (
                
             -- Días restantes (Totales - Transcurridos)
             ((SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] 
+              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
               WHERE Periodo = @periodo 
                 AND EsDomingo = 0 
                 AND EsFeriado = 0) - 
              (SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] 
+              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
               WHERE Periodo = @periodo 
                 AND Fecha <= @CorteExacto 
                 AND EsDomingo = 0 

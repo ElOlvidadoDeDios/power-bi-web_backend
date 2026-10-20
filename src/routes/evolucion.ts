@@ -5,11 +5,15 @@ import { pool } from "../lib/db";
 const router = Router();
 
 router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response) => {
-  const agencia = req.query.agencia as string || "";
-  const asesor = req.query.asesor as string || "";
+  const agenciaParam = req.query.agencia as string || "";
+  const asesorParam = req.query.asesor as string || "";
   const granularidad = req.query.granularidad as string || "Mensual";
   const desde = req.query.desde as string;
   const hasta = req.query.hasta as string;
+
+  // Normalizamos valores por defecto del frontend para tratarlos como comodines vacíos
+  const agencia = (agenciaParam === "Todas" || agenciaParam === "Todas las Agencias") ? "" : agenciaParam;
+  const asesor = (asesorParam === "Todos") ? "" : asesorParam;
 
   try {
     const request = pool.request();
@@ -19,7 +23,7 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
       querySQL = `
         WITH Calendario AS (
             SELECT DISTINCT Periodo, MAX(MesLargo + ' ' + CAST(Año AS VARCHAR)) AS Etiqueta
-            FROM dm_productividad.dbo.dim_calendario
+            FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
             WHERE Periodo >= @desde AND Periodo <= @hasta
             GROUP BY Periodo
         ),
@@ -32,10 +36,10 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
                 ISNULL(MAX(M.ColocacionMontoMetaAjus), ISNULL(MAX(M.ColocacionMontoMeta), 0)) AS ColocacionMetaMonto,
                 ISNULL(MAX(M.ColocacionNumMetaAjus), ISNULL(MAX(M.ColocacionNumMeta), 0)) AS ColocacionMetaNumAgencia,
                 ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
-            FROM DWH_Gestion_Cartera.dbo.fct_flow F
-            LEFT JOIN dm_productividad.dbo.FctMensual M ON F.Periodo = M.Periodo AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
+            LEFT JOIN dm_productividad.dbo.FctMensual M WITH (NOLOCK) ON F.Periodo = M.Periodo AND F.IdSAgencia = M.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY F.Periodo
@@ -43,9 +47,9 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
         Stock AS (
             SELECT 
                 S.Periodo, SUM(S.Cartera) AS CarteraTotal, SUM(S.Mora31) AS Mora31Total
-            FROM DWH_Gestion_Cartera.dbo.fct_stock S
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON S.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON S.IdSAsesor = D_AS.IdSAsesor AND S.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON S.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON S.IdSAsesor = D_AS.IdSAsesor AND S.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY S.Periodo
@@ -68,7 +72,7 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
       querySQL = `
         WITH Calendario AS (
             SELECT DISTINCT Fecha, CAST(DAY(Fecha) AS VARCHAR) + ' ' + LEFT(Mes, 3) AS Etiqueta
-            FROM dm_productividad.dbo.dim_calendario
+            FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
             WHERE Fecha >= @desde AND Fecha <= @hasta
         ),
         Flow AS (
@@ -80,10 +84,10 @@ router.get(["/evolucion", "/api/evolucion"], async (req: Request, res: Response)
                 ISNULL(MAX(M.ColocacionMontoMeta), 0) AS ColocacionMetaMonto,
                 ISNULL(MAX(M.ColocacionNumMeta), 0) AS ColocacionMetaNumAgencia,
                 ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
-            FROM DWH_Gestion_Cartera.dbo.fct_flow F
-            LEFT JOIN dm_productividad.dbo.FctDiario_MetaProy M ON F.Fecha = M.Fecha AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
+            LEFT JOIN dm_productividad.dbo.FctDiario_MetaProy M WITH (NOLOCK) ON F.Fecha = M.Fecha AND F.IdSAgencia = M.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
             WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY F.Fecha

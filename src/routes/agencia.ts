@@ -22,22 +22,22 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Asesores_Com AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor, ISNULL(ColocacionNumMeta, 30) AS MetaAsesor
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Com AS (
@@ -53,7 +53,7 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
                 ISNULL(MAX(TEA), 0) AS TEA,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos 
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Com AS (
@@ -93,20 +93,20 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Rec_List AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Rec AS (
             SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
@@ -126,10 +126,15 @@ router.get(["/agencia", "/api/agencia"], async (req: Request, res: Response) => 
         SELECT 
             CASE IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS opTarget
-        FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia;
+        FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia;
       `);
 
-    res.json({ comercial: result.recordsets[0], recuperacion: result.recordsets[1], resumen: result.recordsets[2] });
+    const recordsets = result.recordsets as unknown as any[];
+    res.json({ 
+        comercial: recordsets[0], 
+        recuperacion: recordsets[1], 
+        resumen: recordsets[2] 
+    });
   } catch (error) {
     console.error("Error obteniendo Agencia:", error);
     res.status(500).json({ error: "Error calculando detalle de agencia" });

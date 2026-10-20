@@ -36,12 +36,24 @@ async function getDWHVersions(): Promise<{ versionETL: string; versionDaemon: st
   }
 }
 
+// 💡 FUNCIÓN AUXILIAR DE LOTES (CONTROL DE CONCURRENCIA)
+async function runInBatches<T>(items: T[], batchSize: number, fn: (item: T) => Promise<any>): Promise<void> {
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    await Promise.allSettled(
+      batch.map(item => fn(item).catch(err => {
+        console.error(`[SmartCache] Error refrescando ruta individual:`, err?.message || err);
+      }))
+    );
+  }
+}
+
 async function refreshKnownRoutes(newVersionETL: string) {
   if (isPrewarming) return;
   isPrewarming = true;
 
   const routesToWarm = Array.from(knownEtlRoutes);
-  console.log(`🔥 [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM...`);
+  console.log(`🔥 [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM de forma controlada...`);
   const start = Date.now();
 
   try {
@@ -49,13 +61,13 @@ async function refreshKnownRoutes(newVersionETL: string) {
     cacheETL.store.clear();
     cacheETL.version = newVersionETL;
 
-    await Promise.allSettled(
-      routesToWarm.map((route) =>
-        fetch(`${lastKnownBaseUrl}${route}`, {
-          headers: { "x-internal-prewarm": "true" },
-        })
-      )
-    );
+    // 👈 AQUÍ APLICAMOS LOS LOTES DE 5 EN 5 EN LUGAR DE DISPARAR TODO JUNTO
+    await runInBatches(routesToWarm, 5, async (route) => {
+      await fetch(`${lastKnownBaseUrl}${route}`, {
+        headers: { "x-internal-prewarm": "true" },
+      });
+    });
+
     console.log(`✅ [SmartCache] RAM actualizada en ${((Date.now() - start) / 1000).toFixed(2)}s.`);
   } catch (err) {
     console.error("⚠️ [SmartCache] Error en refresco de caché:", err);

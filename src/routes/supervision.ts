@@ -18,13 +18,13 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
         -- =================================================================
         WITH CTE_CarteraInic_All AS (
             SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
+            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
             WHERE A.Periodo = @periodo
             GROUP BY DA.IdSAgencia
         ),
         CTE_Flow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Stock_All AS (
             SELECT 
@@ -36,13 +36,13 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
                 ISNULL(SUM(S.Varios), 0) AS Varios, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSociosAnterior ELSE 0 END), 0) AS SociosInicio, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSocios ELSE 0 END), 0) AS SociosActual
-            FROM DWH_Gestion_Cartera.dbo.fct_stock S
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor A ON S.IdSAsesor = A.IdSAsesor AND S.Periodo = A.Periodo
+            FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor A WITH (NOLOCK) ON S.IdSAsesor = A.IdSAsesor AND S.Periodo = A.Periodo
             WHERE S.Periodo = @periodo 
             GROUP BY S.IdSAgencia
         ),
         CTE_MetasFlow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock_All AS (
             SELECT 
@@ -50,15 +50,15 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
                 ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
                 ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
                 ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M 
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
             LEFT JOIN CTE_CarteraInic_All CI ON M.IdSAgencia = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
             GROUP BY M.IdSAgencia
         ),
         CTE_TEA_All AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia, IdSAsesor) F
+            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
@@ -76,16 +76,16 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
         -- =================================================================
         WITH CTE_CarteraInic_Comercial AS (
             SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
+            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
             WHERE A.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
             GROUP BY DA.IdSAgencia
         ),
         CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia FROM DWH_Gestion_Cartera.dbo.dim_asesor WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            SELECT IdSAsesor, IdSAgencia FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
         ),
         CTE_Flow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
         ),
         CTE_Stock_Com AS (
             SELECT 
@@ -99,12 +99,12 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
                 ISNULL(SUM(NroSocios), 0) AS SociosActual,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
-            FROM DWH_Gestion_Cartera.dbo.fct_stock 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
             GROUP BY IdSAgencia
         ),
         CTE_MetasFlow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_MetasStock_Com AS (
             SELECT 
@@ -112,15 +112,15 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
                 ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
                 ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
                 ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M 
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
             LEFT JOIN CTE_CarteraInic_Comercial CI ON M.IdSAgencia = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
             GROUP BY M.IdSAgencia
         ),
         CTE_TEA_Com AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia, IdSAsesor) F
+            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
@@ -146,24 +146,24 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
             SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WHERE Periodo = @periodo GROUP BY IdSAgencia
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
         ),
         CTE_Metas_Asesor AS (
             SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Rec_List AS (
             SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador 
-            FROM DWH_Gestion_Cartera.dbo.dim_asesor 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
         ),
         CTE_Flow_Rec AS (
             SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_Stock_Rec AS (
             SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WHERE Periodo = @periodo GROUP BY IdSAsesor
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
         ),
         CTE_MetasStock_Rec AS (
             SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
@@ -186,10 +186,12 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
         ORDER BY moraCppActual DESC;
       `);
 
+    const recordsets = result.recordsets as unknown as any[];
+
     res.json({
-        completa: result.recordsets[0],
-        comercial: result.recordsets[1],
-        recuperacion: result.recordsets[2]
+        completa: recordsets[0],
+        comercial: recordsets[1],
+        recuperacion: recordsets[2]
     });
   } catch (error) {
     console.error("Error obteniendo Supervisión:", error);
