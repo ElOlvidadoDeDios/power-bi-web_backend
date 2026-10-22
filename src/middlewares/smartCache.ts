@@ -1,79 +1,115 @@
+// D:\Proyectos\power-bi-web_backend\src\middlewares\smartCache.ts
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../lib/db";
 
+type BucketName = "etl" | "gerencial" | "ranking" | "mora";
+
 interface CacheBucket {
+  name: BucketName;
   version: string;
   store: Map<string, any>;
+  knownRoutes: Set<string>;
 }
 
-const cacheETL: CacheBucket = { version: "", store: new Map() };
-const cacheDaemon: CacheBucket = { version: "", store: new Map() };
+const buckets: Record<BucketName, CacheBucket> = {
+  etl: { name: "etl", version: "", store: new Map(), knownRoutes: new Set(["/api/filtros"]) },
+  gerencial: { name: "gerencial", version: "", store: new Map(), knownRoutes: new Set() },
+  ranking: { name: "ranking", version: "", store: new Map(), knownRoutes: new Set(["/api/ranking"]) },
+  mora: { name: "mora", version: "", store: new Map(), knownRoutes: new Set(["/api/mora", "/api/pagos-mora"]) },
+};
 
-// Guarda las rutas reales que los servicios del frontend solicitan para pre-calentarlas sin errores 404
-const knownEtlRoutes = new Set<string>(["/api/filtros"]);
 let lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3000}`;
-
 let isChecking = false;
-let isPrewarming = false;
 
-async function getDWHVersions(): Promise<{ versionETL: string; versionDaemon: string } | null> {
+// Clasifica cada petición entrante en su caché correspondiente
+function resolveBucket(path: string): CacheBucket {
+  const p = path.toLowerCase();
+  if (p.includes("cancelados") || p.includes("avance")) {
+    return buckets.gerencial;
+  }
+  if (p.includes("ranking")) {
+    return buckets.ranking;
+  }
+  if (p.includes("mora") || p.includes("preventiva")) {
+    return buckets.mora;
+  }
+  return buckets.etl;
+}
+
+// Consulta las 4 huellas de versión en 1 sola lectura ultrarrápida a SQL Server
+async function getAllVersions(): Promise<Record<BucketName, string> | null> {
   try {
     const result = await pool.request().query(`
       SELECT 
-        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1), 126) AS VersionETL,
-        CONVERT(VARCHAR(30), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]), 126) AS VersionDaemon
+        -- 1. Versión del ETL Principal (Id = 1)
+        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 1), 126) AS vEtl,
+        
+        -- 2. Versión de Actualizador Gerencial (Id = 2 o firma de respaldo sobre las tablas)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 2), 126),
+          CONCAT(
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] WITH (NOLOCK)), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] WITH (NOLOCK))
+          )
+        ) AS vGerencial,
+
+        -- 3. Versión de Ranking (Id = 3 o fecha + suma de puntajes)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 3), 126),
+          CONCAT(
+            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)), 126), '_',
+            CAST((SELECT ISNULL(SUM([Puntaje_Total]), 0) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)) AS VARCHAR(30))
+          )
+        ) AS vRanking,
+
+        -- 4. Versión de Mora e IA (Id = 4 o fecha foto + conteo + compromisos)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 4), 126),
+          CONCAT(
+            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)), 126), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK) WHERE [Compromiso] IS NOT NULL), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_pagos_mora_diarios] WITH (NOLOCK))
+          )
+        ) AS vMora
     `);
+
     const row = result.recordset?.[0];
     if (!row) return null;
 
     return {
-      versionETL: String(row.VersionETL || "v1"),
-      versionDaemon: String(row.VersionDaemon || "v1"),
+      etl: String(row.vEtl || "v1"),
+      gerencial: String(row.vGerencial || "v1"),
+      ranking: String(row.vRanking || "v1"),
+      mora: String(row.vMora || "v1"),
     };
   } catch (err) {
-    console.error("⚠️ [SmartCache] Error leyendo semáforo SQL:", err);
+    console.error("⚠️ [SmartCache] Error leyendo versiones SQL:", err);
     return null;
   }
 }
 
-// 💡 FUNCIÓN AUXILIAR DE LOTES (CONTROL DE CONCURRENCIA)
-async function runInBatches<T>(items: T[], batchSize: number, fn: (item: T) => Promise<any>): Promise<void> {
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.allSettled(
-      batch.map(item => fn(item).catch(err => {
-        console.error(`[SmartCache] Error refrescando ruta individual:`, err?.message || err);
-      }))
-    );
-  }
-}
+async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
+  const routesToWarm = Array.from(bucket.knownRoutes);
+  bucket.store.clear();
+  bucket.version = newVersion;
 
-async function refreshKnownRoutes(newVersionETL: string) {
-  if (isPrewarming) return;
-  isPrewarming = true;
+  if (routesToWarm.length === 0) return;
 
-  const routesToWarm = Array.from(knownEtlRoutes);
-  console.log(`🔥 [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM de forma controlada...`);
+  console.log(`🔥 [SmartCache:${bucket.name.toUpperCase()}] Refrescando ${routesToWarm.length} rutas en RAM...`);
   const start = Date.now();
 
-  try {
-    // Limpiamos para que las nuevas lecturas reemplacen con datos frescos del ETL
-    cacheETL.store.clear();
-    cacheETL.version = newVersionETL;
-
-    // 👈 AQUÍ APLICAMOS LOS LOTES DE 5 EN 5 EN LUGAR DE DISPARAR TODO JUNTO
-    await runInBatches(routesToWarm, 5, async (route) => {
-      await fetch(`${lastKnownBaseUrl}${route}`, {
-        headers: { "x-internal-prewarm": "true" },
-      });
-    });
-
-    console.log(`✅ [SmartCache] RAM actualizada en ${((Date.now() - start) / 1000).toFixed(2)}s.`);
-  } catch (err) {
-    console.error("⚠️ [SmartCache] Error en refresco de caché:", err);
-  } finally {
-    isPrewarming = false;
+  for (let i = 0; i < routesToWarm.length; i += 4) {
+    const batch = routesToWarm.slice(i, i + 4);
+    await Promise.allSettled(
+      batch.map((route) =>
+        fetch(`${lastKnownBaseUrl}${route}`, {
+          headers: { "x-internal-prewarm": "true" },
+        }).catch(() => {})
+      )
+    );
   }
+
+  console.log(`✅ [SmartCache:${bucket.name.toUpperCase()}] Listo en ${((Date.now() - start) / 1000).toFixed(2)}s.`);
 }
 
 export function startCacheWatcher() {
@@ -81,18 +117,17 @@ export function startCacheWatcher() {
     if (isChecking) return;
     isChecking = true;
     try {
-      const info = await getDWHVersions();
-      if (!info) return;
+      const versions = await getAllVersions();
+      if (!versions) return;
 
-      if (cacheDaemon.version !== info.versionDaemon) {
-        console.log(`🔄 [SmartCache] Nuevo cálculo de Ranking detectado (${info.versionDaemon}).`);
-        cacheDaemon.store.clear();
-        cacheDaemon.version = info.versionDaemon;
-      }
+      for (const key of ["etl", "gerencial", "ranking", "mora"] as BucketName[]) {
+        const bucket = buckets[key];
+        const latestVer = versions[key];
 
-      if (cacheETL.version !== info.versionETL) {
-        console.log(`🔄 [SmartCache] Nueva carga ETL detectada (${info.versionETL}).`);
-        await refreshKnownRoutes(info.versionETL);
+        if (bucket.version !== latestVer) {
+          console.log(`🔄 [SmartCache:${key.toUpperCase()}] Cambio detectado (${latestVer}). Actualizando su caché independiente...`);
+          await refreshBucketRoutes(bucket, latestVer);
+        }
       }
     } finally {
       isChecking = false;
@@ -103,30 +138,32 @@ export function startCacheWatcher() {
   setInterval(checkLoop, 20000);
 }
 
+export function getCombinedVersionSignature(): string {
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}`;
+}
+
 export async function smartCacheMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.method !== "GET" || req.path.includes("health")) {
     return next();
   }
 
-  // Capturamos automáticamente el puerto real donde corre el backend (ej. localhost:3000)
   const host = req.headers.host;
   if (host) {
     lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3000}`;
   }
 
   if (req.path.endsWith("/cache-clear")) {
-    cacheETL.store.clear();
-    cacheDaemon.store.clear();
-    return res.json({ ok: true, message: "Caché limpiado manualmente" });
+    Object.values(buckets).forEach((b) => b.store.clear());
+    return res.json({ ok: true, message: "Los 4 cachés fueron limpiados manualmente" });
   }
 
-  const isDaemonRoute = req.path.includes("ranking") || req.path.includes("preventiva");
-  const activeBucket = isDaemonRoute ? cacheDaemon : cacheETL;
+  const activeBucket = resolveBucket(req.path);
   const cacheKey = req.originalUrl;
   const isInternalPrewarm = req.headers["x-internal-prewarm"] === "true";
 
   if (!isInternalPrewarm && activeBucket.store.has(cacheKey)) {
-    res.setHeader("X-Cache", "HIT");
+    res.setHeader("X-Cache", `HIT-${activeBucket.name.toUpperCase()}`);
+    res.setHeader("X-Cache-Bucket", activeBucket.name);
     res.setHeader("X-Data-Version", activeBucket.version);
     return res.json(activeBucket.store.get(cacheKey));
   }
@@ -135,11 +172,13 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
   res.json = (body: any) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
-      if (!isDaemonRoute) {
-        knownEtlRoutes.add(cacheKey);
+      // Guardamos hasta 15 rutas frecuentes por bucket (incluyendo página 1 de avance/cancelados)
+      if (activeBucket.knownRoutes.size < 15 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+        activeBucket.knownRoutes.add(req.originalUrl);
       }
     }
-    res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : "MISS");
+    res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : `MISS-${activeBucket.name.toUpperCase()}`);
+    res.setHeader("X-Cache-Bucket", activeBucket.name);
     res.setHeader("X-Data-Version", activeBucket.version);
     return originalJson(body);
   };

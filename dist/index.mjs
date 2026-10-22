@@ -21194,27 +21194,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router15;
+    module.exports = Router17;
     module.exports.Route = Route;
-    function Router15(options) {
-      if (!(this instanceof Router15)) {
-        return new Router15(options);
+    function Router17(options) {
+      if (!(this instanceof Router17)) {
+        return new Router17(options);
       }
       const opts = options || {};
-      function router15(req, res, next) {
-        router15.handle(req, res, next);
+      function router17(req, res, next) {
+        router17.handle(req, res, next);
       }
-      Object.setPrototypeOf(router15, this);
-      router15.caseSensitive = opts.caseSensitive;
-      router15.mergeParams = opts.mergeParams;
-      router15.params = {};
-      router15.strict = opts.strict;
-      router15.stack = [];
-      return router15;
+      Object.setPrototypeOf(router17, this);
+      router17.caseSensitive = opts.caseSensitive;
+      router17.mergeParams = opts.mergeParams;
+      router17.params = {};
+      router17.strict = opts.strict;
+      router17.stack = [];
+      return router17;
     }
-    Router15.prototype = function() {
+    Router17.prototype = function() {
     };
-    Router15.prototype.param = function param(name, fn) {
+    Router17.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -21234,7 +21234,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router15.prototype.handle = function handle(req, res, callback) {
+    Router17.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21361,7 +21361,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router15.prototype.use = function use(handler) {
+    Router17.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21394,7 +21394,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router15.prototype.route = function route(path) {
+    Router17.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21409,7 +21409,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router15.prototype[method] = function(path) {
+      Router17.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21592,13 +21592,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router15 = require_router();
+    var Router17 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router15 = null;
+      var router17 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21607,13 +21607,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router15 === null) {
-            router15 = new Router15({
+          if (router17 === null) {
+            router17 = new Router17({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router15;
+          return router17;
         }
       });
     };
@@ -21684,15 +21684,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router15 = this.router;
+      var router17 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router15.use(path, fn2);
+          return router17.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router15.use(path, function mounted_app(req, res, next) {
+        router17.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -24340,7 +24340,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router15 = require_router();
+    var Router17 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24362,8 +24362,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router15.Route;
-    exports.Router = Router15;
+    exports.Route = Router17.Route;
+    exports.Router = Router17;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28977,7 +28977,7 @@ var require_pino = __commonJS({
 var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
-var import_express15 = __toESM(require_express2(), 1);
+var import_express17 = __toESM(require_express2(), 1);
 
 // src/middlewares/errorHandler.ts
 var errorHandler = (err, req, res, next) => {
@@ -29008,7 +29008,7 @@ var errorHandler = (err, req, res, next) => {
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
-var import_express14 = __toESM(require_express2(), 1);
+var import_express16 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -34482,7 +34482,7 @@ var connectDB = async () => {
 
 // src/routes/preventiva.ts
 var router2 = (0, import_express2.Router)();
-router2.get("/api/gestion-preventiva", async (_req, res) => {
+router2.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (_req, res) => {
   try {
     const result = await pool.request().query(`
       WITH ReporteGestionPreventiva AS (
@@ -34561,6 +34561,160 @@ var preventiva_default = router2;
 
 // src/routes/filtros.ts
 var import_express3 = __toESM(require_express2(), 1);
+
+// src/middlewares/smartCache.ts
+var buckets = {
+  etl: { name: "etl", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/filtros"]) },
+  gerencial: { name: "gerencial", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set() },
+  ranking: { name: "ranking", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/ranking"]) },
+  mora: { name: "mora", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/mora", "/api/pagos-mora"]) }
+};
+var lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3e3}`;
+var isChecking = false;
+function resolveBucket(path) {
+  const p = path.toLowerCase();
+  if (p.includes("cancelados") || p.includes("avance")) {
+    return buckets.gerencial;
+  }
+  if (p.includes("ranking")) {
+    return buckets.ranking;
+  }
+  if (p.includes("mora") || p.includes("preventiva")) {
+    return buckets.mora;
+  }
+  return buckets.etl;
+}
+async function getAllVersions() {
+  try {
+    const result = await pool.request().query(`
+      SELECT 
+        -- 1. Versi\xF3n del ETL Principal (Id = 1)
+        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 1), 126) AS vEtl,
+        
+        -- 2. Versi\xF3n de Actualizador Gerencial (Id = 2 o firma de respaldo sobre las tablas)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 2), 126),
+          CONCAT(
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] WITH (NOLOCK)), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] WITH (NOLOCK))
+          )
+        ) AS vGerencial,
+
+        -- 3. Versi\xF3n de Ranking (Id = 3 o fecha + suma de puntajes)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 3), 126),
+          CONCAT(
+            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)), 126), '_',
+            CAST((SELECT ISNULL(SUM([Puntaje_Total]), 0) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)) AS VARCHAR(30))
+          )
+        ) AS vRanking,
+
+        -- 4. Versi\xF3n de Mora e IA (Id = 4 o fecha foto + conteo + compromisos)
+        COALESCE(
+          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 4), 126),
+          CONCAT(
+            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)), 126), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK) WHERE [Compromiso] IS NOT NULL), '_',
+            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_pagos_mora_diarios] WITH (NOLOCK))
+          )
+        ) AS vMora
+    `);
+    const row = result.recordset?.[0];
+    if (!row) return null;
+    return {
+      etl: String(row.vEtl || "v1"),
+      gerencial: String(row.vGerencial || "v1"),
+      ranking: String(row.vRanking || "v1"),
+      mora: String(row.vMora || "v1")
+    };
+  } catch (err) {
+    console.error("\u26A0\uFE0F [SmartCache] Error leyendo versiones SQL:", err);
+    return null;
+  }
+}
+async function refreshBucketRoutes(bucket, newVersion) {
+  const routesToWarm = Array.from(bucket.knownRoutes);
+  bucket.store.clear();
+  bucket.version = newVersion;
+  if (routesToWarm.length === 0) return;
+  console.log(`\u{1F525} [SmartCache:${bucket.name.toUpperCase()}] Refrescando ${routesToWarm.length} rutas en RAM...`);
+  const start = Date.now();
+  for (let i = 0; i < routesToWarm.length; i += 4) {
+    const batch = routesToWarm.slice(i, i + 4);
+    await Promise.allSettled(
+      batch.map(
+        (route) => fetch(`${lastKnownBaseUrl}${route}`, {
+          headers: { "x-internal-prewarm": "true" }
+        }).catch(() => {
+        })
+      )
+    );
+  }
+  console.log(`\u2705 [SmartCache:${bucket.name.toUpperCase()}] Listo en ${((Date.now() - start) / 1e3).toFixed(2)}s.`);
+}
+function startCacheWatcher() {
+  const checkLoop = async () => {
+    if (isChecking) return;
+    isChecking = true;
+    try {
+      const versions = await getAllVersions();
+      if (!versions) return;
+      for (const key of ["etl", "gerencial", "ranking", "mora"]) {
+        const bucket = buckets[key];
+        const latestVer = versions[key];
+        if (bucket.version !== latestVer) {
+          console.log(`\u{1F504} [SmartCache:${key.toUpperCase()}] Cambio detectado (${latestVer}). Actualizando su cach\xE9 independiente...`);
+          await refreshBucketRoutes(bucket, latestVer);
+        }
+      }
+    } finally {
+      isChecking = false;
+    }
+  };
+  setTimeout(checkLoop, 1500);
+  setInterval(checkLoop, 2e4);
+}
+function getCombinedVersionSignature() {
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}`;
+}
+async function smartCacheMiddleware(req, res, next) {
+  if (req.method !== "GET" || req.path.includes("health")) {
+    return next();
+  }
+  const host = req.headers.host;
+  if (host) {
+    lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3e3}`;
+  }
+  if (req.path.endsWith("/cache-clear")) {
+    Object.values(buckets).forEach((b) => b.store.clear());
+    return res.json({ ok: true, message: "Los 4 cach\xE9s fueron limpiados manualmente" });
+  }
+  const activeBucket = resolveBucket(req.path);
+  const cacheKey = req.originalUrl;
+  const isInternalPrewarm = req.headers["x-internal-prewarm"] === "true";
+  if (!isInternalPrewarm && activeBucket.store.has(cacheKey)) {
+    res.setHeader("X-Cache", `HIT-${activeBucket.name.toUpperCase()}`);
+    res.setHeader("X-Cache-Bucket", activeBucket.name);
+    res.setHeader("X-Data-Version", activeBucket.version);
+    return res.json(activeBucket.store.get(cacheKey));
+  }
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
+      activeBucket.store.set(cacheKey, body);
+      if (activeBucket.knownRoutes.size < 15 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+        activeBucket.knownRoutes.add(req.originalUrl);
+      }
+    }
+    res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : `MISS-${activeBucket.name.toUpperCase()}`);
+    res.setHeader("X-Cache-Bucket", activeBucket.name);
+    res.setHeader("X-Data-Version", activeBucket.version);
+    return originalJson(body);
+  };
+  next();
+}
+
+// src/routes/filtros.ts
 var router3 = (0, import_express3.Router)();
 router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
   try {
@@ -34593,15 +34747,16 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
       SELECT TOP (1) 
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 hh:mm tt', 'es-PE') AS UltimaActualizacion
       FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      ORDER BY [Id] DESC
+      ORDER BY [UltimaActualizacion] DESC
     `);
     const ultimaActualizacion = logResult.recordset.length > 0 ? logResult.recordset[0].UltimaActualizacion : "Desconocido";
     res.json({
       periodos: periodos.recordset.map((p) => p.Periodo),
       asesores: asesores.recordset,
       fechas: fechas.recordset,
-      ultimaActualizacion
-      // Enviamos al Frontend
+      ultimaActualizacion,
+      versionSignature: getCombinedVersionSignature()
+      // 👈 Firma unificada de los 4 cachés
     });
   } catch (error2) {
     console.error("Error obteniendo filtros:", error2);
@@ -35441,7 +35596,10 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
           ISNULL(C.[Telefono_celular_1], '') AS Celular1,
           ISNULL(C.[Telefono_celular_2], '') AS Celular2,
           ISNULL(C.[Telefono_fijo_1], '') AS TelefonoFijo1,
-          ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2
+          ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2,
+          COUNT(*) OVER() AS TotalRegistrosGlobal,
+          SUM(ISNULL(C.Prestamo, 0)) OVER() AS TotalPrestamoGlobal,
+          SUM(ISNULL(C.[Saldo_Cancelacion], 0)) OVER() AS TotalSaldoGlobal
       FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON C.IdSAsesor = D_AS.IdSAsesor 
@@ -35463,7 +35621,7 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
           OR
           (@vista = 'recuperacion' AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL')))
         )
-      ORDER BY C.[Fecha_Cancelacion] DESC
+      ORDER BY C.[Fecha_Cancelacion] DESC, C.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
     const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("tipoCancelacion", sql9.VarChar(50), tipoCancelacion).input("frecuencia", sql9.VarChar(50), frecuencia).input("vista", sql9.VarChar(20), vista).input("offset", sql9.Int, offset).input("limit", sql9.Int, limit).query(querySQL);
@@ -35483,8 +35641,8 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
   const agenciaParam = req.query.agencia || "";
   const asesorParam = req.query.asesor || "";
   const vista = req.query.vista || "comercial";
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 100;
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.max(parseInt(req.query.limit) || 100, 1);
   const offset = (page - 1) * limit;
   const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
   const asesor = asesorParam === "Todos" ? "" : asesorParam;
@@ -35504,7 +35662,9 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           ISNULL(A.[Telefono 1], '') AS TelefonoFijo1,
           ISNULL(A.[Telefono 2], '') AS TelefonoFijo2,
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
-          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
+          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas,
+          COUNT(*) OVER() AS TotalRegistrosGlobal,
+          AVG(CAST(ISNULL(A.[Avance Cartera], 0) AS FLOAT)) OVER() AS PromedioAvanceGlobal
       FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON A.IdSAsesor = D_AS.IdSAsesor 
@@ -35514,11 +35674,11 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
       WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
         ${filtroVistaSQL}
-      ORDER BY A.[Avance Cartera] DESC
+      ORDER BY A.[Avance Cartera] DESC, A.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
     const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).input("offset", sql10.Int, offset).input("limit", sql10.Int, limit).query(querySQL);
-    res.json(result.recordset);
+    res.json(result.recordset || []);
   } catch (error2) {
     console.error("Error obteniendo Avance de Cartera:", error2);
     res.status(500).json({ error: "Error al consultar la base de datos" });
@@ -35564,144 +35724,156 @@ router13.get(["/ranking", "/api/ranking"], async (_req, res) => {
 });
 var ranking_default = router13;
 
-// src/routes/index.ts
+// src/routes/mora.ts
+var import_express14 = __toESM(require_express2(), 1);
 var router14 = (0, import_express14.Router)();
-router14.use(health_default);
-router14.use(preventiva_default);
-router14.use(filtros_default);
-router14.use(calendario_default);
-router14.use(gerencia_default);
-router14.use(supervision_default);
-router14.use(agencia_default);
-router14.use(asesores_default);
-router14.use(diaria_default);
-router14.use(evolucion_default);
-router14.use(cancelados_default);
-router14.use(avance_default);
-router14.use(ranking_default);
-var routes_default = router14;
+router14.get(["/mora", "/api/mora"], async (_req, res) => {
+  try {
+    const request = pool.request();
+    const querySQL = `
+      DECLARE @UltimaFecha DATE = (
+          SELECT MAX([Fecha_Foto]) 
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+      );
 
-// src/middlewares/smartCache.ts
-var cacheETL = { version: "", store: /* @__PURE__ */ new Map() };
-var cacheDaemon = { version: "", store: /* @__PURE__ */ new Map() };
-var knownEtlRoutes = /* @__PURE__ */ new Set(["/api/filtros"]);
-var lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3e3}`;
-var isChecking = false;
-var isPrewarming = false;
-async function getDWHVersions() {
-  try {
-    const result = await pool.request().query(`
       SELECT 
-        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1), 126) AS VersionETL,
-        CONVERT(VARCHAR(30), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10]), 126) AS VersionDaemon
-    `);
-    const row = result.recordset?.[0];
-    if (!row) return null;
-    return {
-      versionETL: String(row.VersionETL || "v1"),
-      versionDaemon: String(row.VersionDaemon || "v1")
-    };
-  } catch (err) {
-    console.error("\u26A0\uFE0F [SmartCache] Error leyendo sem\xE1foro SQL:", err);
-    return null;
+          CONVERT(VARCHAR(10), R.[Fecha_Foto], 103) AS fechaFoto,
+          R.[Periodo] AS periodo,
+          CASE R.[IdSAgencia]
+              WHEN '01' THEN 'Wanchaq'
+              WHEN '02' THEN 'San Jer\xF3nimo'
+              WHEN '03' THEN 'Quillabamba'
+              WHEN '04' THEN 'Sicuani'
+              WHEN '05' THEN 'Molino'
+              WHEN '06' THEN 'Juliaca'
+              WHEN '07' THEN 'Lima Los Olivos'
+              WHEN '08' THEN 'Tica Tica'
+              WHEN '09' THEN 'Magisterio'
+              WHEN '10' THEN 'Lima SJL'
+              WHEN '11' THEN 'Chiclayo'
+              WHEN '12' THEN 'Arequipa'
+              WHEN '13' THEN 'Pucallpa'
+              ELSE 'Otra Agencia'
+          END AS agencia,
+          RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
+          ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
+          RTRIM(LTRIM(R.[Pagare])) AS pagare,
+          RTRIM(LTRIM(R.[Socio])) AS socio,
+          RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
+          ISNULL(R.[Monto_Desembolsado], 0) AS montoDesembolsado,
+          ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
+          ISNULL(R.[Tasa_TEA], 0) AS tasaTea,
+          ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
+          ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
+          R.[Estado_Mora] AS estadoMora,
+          R.[Nivel_Riesgo_IA] AS nivelRiesgoIa,
+          R.[Probabilidad_IA] AS probabilidadIa,
+          CASE 
+              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'XGBoost EWS v2'
+              ELSE NULL 
+          END AS modeloIa,
+          CASE 
+              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 1 
+              ELSE 0 
+          END AS advertidoPorIa,
+          ISNULL(R.[Compromiso], '') AS compromiso,
+          CASE 
+              WHEN R.[Fecha_Promesa] IS NOT NULL THEN CONVERT(VARCHAR(10), R.[Fecha_Promesa], 103)
+              ELSE ''
+          END AS fechaPromesa,
+          ISNULL(R.[Telefonos], '') AS telefonos
+      FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
+      OUTER APPLY (
+          SELECT TOP 1 ISNULL(DA.[AsesorNombresApellidos], DA.[Asesor]) AS NombreAsesor
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] DA WITH (NOLOCK)
+          WHERE RTRIM(LTRIM(DA.[IdSAsesor])) = RTRIM(LTRIM(R.[IdSAsesor]))
+          ORDER BY DA.[Periodo] DESC
+      ) D_AS
+      WHERE R.[Fecha_Foto] = @UltimaFecha
+        AND (
+            R.[Estado_Mora] IN ('3. Mora Potencial', '2. Mora Temprana')
+            OR R.[Probabilidad_IA] IS NOT NULL
+        )
+      ORDER BY R.[Saldo_Capital] DESC;
+    `;
+    const result = await request.query(querySQL);
+    res.json(result.recordset || []);
+  } catch (error2) {
+    console.error("Error obteniendo Gesti\xF3n de Mora e IA:", error2);
+    res.status(500).json({ error: "Error al consultar la base de datos de riesgo integral" });
   }
-}
-async function runInBatches(items, batchSize, fn) {
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.allSettled(
-      batch.map((item) => fn(item).catch((err) => {
-        console.error(`[SmartCache] Error refrescando ruta individual:`, err?.message || err);
-      }))
-    );
-  }
-}
-async function refreshKnownRoutes(newVersionETL) {
-  if (isPrewarming) return;
-  isPrewarming = true;
-  const routesToWarm = Array.from(knownEtlRoutes);
-  console.log(`\u{1F525} [SmartCache] Refrescando ${routesToWarm.length} rutas activas en RAM de forma controlada...`);
-  const start = Date.now();
+});
+var mora_default = router14;
+
+// src/routes/pagosMora.ts
+var import_express15 = __toESM(require_express2(), 1);
+var router15 = (0, import_express15.Router)();
+router15.get(["/pagos-mora", "/api/pagos-mora"], async (req, res) => {
   try {
-    cacheETL.store.clear();
-    cacheETL.version = newVersionETL;
-    await runInBatches(routesToWarm, 5, async (route) => {
-      await fetch(`${lastKnownBaseUrl}${route}`, {
-        headers: { "x-internal-prewarm": "true" }
-      });
-    });
-    console.log(`\u2705 [SmartCache] RAM actualizada en ${((Date.now() - start) / 1e3).toFixed(2)}s.`);
-  } catch (err) {
-    console.error("\u26A0\uFE0F [SmartCache] Error en refresco de cach\xE9:", err);
-  } finally {
-    isPrewarming = false;
+    const request = pool.request();
+    const querySQL = `
+      SELECT 
+          RTRIM(LTRIM([Pagare])) AS pagare,
+          CASE [Agencia]
+              WHEN '01' THEN 'Wanchaq'
+              WHEN '02' THEN 'San Jer\xF3nimo'
+              WHEN '03' THEN 'Quillabamba'
+              WHEN '04' THEN 'Sicuani'
+              WHEN '05' THEN 'Molino'
+              WHEN '06' THEN 'Juliaca'
+              WHEN '07' THEN 'Lima Los Olivos'
+              WHEN '08' THEN 'Tica Tica'
+              WHEN '09' THEN 'Magisterio'
+              WHEN '10' THEN 'Lima SJL'
+              WHEN '11' THEN 'Chiclayo'
+              WHEN '12' THEN 'Arequipa'
+              WHEN '13' THEN 'Pucallpa'
+              ELSE ISNULL([Agencia], 'Otra Agencia')
+          END AS agencia,
+          RTRIM(LTRIM([Socio])) AS socio,
+          RTRIM(LTRIM([Texto_Mostrar])) AS texto_mostrar,
+          CONVERT(VARCHAR(10), [Fecha_Deteccion], 120) AS fecha_deteccion,
+          CASE 
+              WHEN [Fecha_Deteccion] = CAST(GETDATE() AS DATE) THEN 'HOY'
+              ELSE 'AYER'
+          END AS tipo
+      FROM [DWH_Gestion_Cartera].[dbo].[fct_pagos_mora_diarios] WITH (NOLOCK)
+      WHERE [Fecha_Deteccion] >= DATEADD(day, -1, CAST(GETDATE() AS DATE))
+      ORDER BY [Fecha_Deteccion] DESC;
+    `;
+    const result = await request.query(querySQL);
+    res.json(result.recordset || []);
+  } catch (error2) {
+    console.error("Error obteniendo pagos de mora diarios:", error2);
+    res.json([]);
   }
-}
-function startCacheWatcher() {
-  const checkLoop = async () => {
-    if (isChecking) return;
-    isChecking = true;
-    try {
-      const info = await getDWHVersions();
-      if (!info) return;
-      if (cacheDaemon.version !== info.versionDaemon) {
-        console.log(`\u{1F504} [SmartCache] Nuevo c\xE1lculo de Ranking detectado (${info.versionDaemon}).`);
-        cacheDaemon.store.clear();
-        cacheDaemon.version = info.versionDaemon;
-      }
-      if (cacheETL.version !== info.versionETL) {
-        console.log(`\u{1F504} [SmartCache] Nueva carga ETL detectada (${info.versionETL}).`);
-        await refreshKnownRoutes(info.versionETL);
-      }
-    } finally {
-      isChecking = false;
-    }
-  };
-  setTimeout(checkLoop, 1500);
-  setInterval(checkLoop, 2e4);
-}
-async function smartCacheMiddleware(req, res, next) {
-  if (req.method !== "GET" || req.path.includes("health")) {
-    return next();
-  }
-  const host = req.headers.host;
-  if (host) {
-    lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3e3}`;
-  }
-  if (req.path.endsWith("/cache-clear")) {
-    cacheETL.store.clear();
-    cacheDaemon.store.clear();
-    return res.json({ ok: true, message: "Cach\xE9 limpiado manualmente" });
-  }
-  const isDaemonRoute = req.path.includes("ranking") || req.path.includes("preventiva");
-  const activeBucket = isDaemonRoute ? cacheDaemon : cacheETL;
-  const cacheKey = req.originalUrl;
-  const isInternalPrewarm = req.headers["x-internal-prewarm"] === "true";
-  if (!isInternalPrewarm && activeBucket.store.has(cacheKey)) {
-    res.setHeader("X-Cache", "HIT");
-    res.setHeader("X-Data-Version", activeBucket.version);
-    return res.json(activeBucket.store.get(cacheKey));
-  }
-  const originalJson = res.json.bind(res);
-  res.json = (body) => {
-    if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
-      activeBucket.store.set(cacheKey, body);
-      if (!isDaemonRoute) {
-        knownEtlRoutes.add(cacheKey);
-      }
-    }
-    res.setHeader("X-Cache", isInternalPrewarm ? "PREWARM" : "MISS");
-    res.setHeader("X-Data-Version", activeBucket.version);
-    return originalJson(body);
-  };
-  next();
-}
+});
+var pagosMora_default = router15;
+
+// src/routes/index.ts
+var router16 = (0, import_express16.Router)();
+router16.use(health_default);
+router16.use(preventiva_default);
+router16.use(filtros_default);
+router16.use(calendario_default);
+router16.use(gerencia_default);
+router16.use(supervision_default);
+router16.use(agencia_default);
+router16.use(asesores_default);
+router16.use(diaria_default);
+router16.use(evolucion_default);
+router16.use(cancelados_default);
+router16.use(avance_default);
+router16.use(ranking_default);
+router16.use(mora_default);
+router16.use(pagosMora_default);
+var routes_default = router16;
 
 // src/app.ts
-var app = (0, import_express15.default)();
+var app = (0, import_express17.default)();
 app.set("etag", false);
 app.use((0, import_cors.default)());
-app.use(import_express15.default.json());
+app.use(import_express17.default.json());
 app.use(smartCacheMiddleware);
 startCacheWatcher();
 app.get("/health", (req, res) => {

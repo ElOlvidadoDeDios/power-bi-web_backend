@@ -36,3 +36,6 @@ pnpm-debug.log*
 # System files
 .DS_Store
 Thumbs.db
+
+readme.txt
+backend_completo,txt

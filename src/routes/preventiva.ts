@@ -3,7 +3,7 @@ import { pool } from "../lib/db";
 
 const router = Router();
 
-router.get("/api/gestion-preventiva", async (_req: Request, res: Response) => {
+router.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (_req: Request, res: Response) => {
   try {
     const result = await pool.request().query(`
       WITH ReporteGestionPreventiva AS (

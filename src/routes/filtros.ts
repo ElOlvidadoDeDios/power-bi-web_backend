@@ -1,5 +1,7 @@
+// En D:\Proyectos\power-bi-web_backend\src\routes\filtros.ts
 import { Router, Request, Response } from "express";
 import { pool } from "../lib/db";
+import { getCombinedVersionSignature } from "../middlewares/smartCache";
 
 const router = Router();
 
@@ -33,15 +35,13 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       ORDER BY [Fecha] DESC
     `);
 
-    // Obtenemos la última actualización del ETL formateada como DD/MM/YYYY · HH:MM a.m./p.m.
     const logResult = await pool.request().query(`
       SELECT TOP (1) 
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm tt', 'es-PE') AS UltimaActualizacion
       FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      ORDER BY [Id] DESC
+      ORDER BY [UltimaActualizacion] DESC
     `);
 
-    // Valor por defecto en caso la tabla esté vacía
     const ultimaActualizacion = logResult.recordset.length > 0 
       ? logResult.recordset[0].UltimaActualizacion 
       : 'Desconocido';
@@ -50,7 +50,8 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       periodos: periodos.recordset.map((p: any) => p.Periodo),
       asesores: asesores.recordset,
       fechas: fechas.recordset,
-      ultimaActualizacion: ultimaActualizacion // Enviamos al Frontend
+      ultimaActualizacion: ultimaActualizacion,
+      versionSignature: getCombinedVersionSignature(), // 👈 Firma unificada de los 4 cachés
     });
   } catch (error) {
     console.error("Error obteniendo filtros:", error);

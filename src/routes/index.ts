@@ -14,6 +14,8 @@ import evolucionRoutes from './evolucion';
 import canceladosRoutes from './cancelados';
 import avanceRoutes from './avance';
 import rankingRoutes from './ranking';
+import moraRoutes from './mora';
+import pagosMoraRoutes from './pagosMora';
 
 const router: IRouter = Router();
 
@@ -30,5 +32,7 @@ router.use(evolucionRoutes);
 router.use(canceladosRoutes);
 router.use(avanceRoutes);
 router.use(rankingRoutes);
+router.use(moraRoutes);
+router.use(pagosMoraRoutes);
 
 export default router;

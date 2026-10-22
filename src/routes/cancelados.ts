@@ -1,3 +1,4 @@
+// src/routes/cancelados.ts
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
@@ -41,7 +42,10 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
           ISNULL(C.[Telefono_celular_1], '') AS Celular1,
           ISNULL(C.[Telefono_celular_2], '') AS Celular2,
           ISNULL(C.[Telefono_fijo_1], '') AS TelefonoFijo1,
-          ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2
+          ISNULL(C.[Telefono_fijo_2], '') AS TelefonoFijo2,
+          COUNT(*) OVER() AS TotalRegistrosGlobal,
+          SUM(ISNULL(C.Prestamo, 0)) OVER() AS TotalPrestamoGlobal,
+          SUM(ISNULL(C.[Saldo_Cancelacion], 0)) OVER() AS TotalSaldoGlobal
       FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] C WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON C.IdSAsesor = D_AS.IdSAsesor 
@@ -63,7 +67,7 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
           OR
           (@vista = 'recuperacion' AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL')))
         )
-      ORDER BY C.[Fecha_Cancelacion] DESC
+      ORDER BY C.[Fecha_Cancelacion] DESC, C.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
 

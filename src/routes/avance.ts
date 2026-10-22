@@ -1,3 +1,4 @@
+// src/routes/avance.ts
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
@@ -7,10 +8,10 @@ const router = Router();
 router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
   const agenciaParam = req.query.agencia as string || "";
   const asesorParam = req.query.asesor as string || "";
-  const vista = req.query.vista as string || "comercial"; // 'comercial' o 'recuperacion'
+  const vista = req.query.vista as string || "comercial";
   
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 100; // Por defecto 100
+  const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+  const limit = Math.max(parseInt(req.query.limit as string) || 100, 1);
   const offset = (page - 1) * limit;
 
   const agencia = (agenciaParam === "Todas" || agenciaParam === "Todas las Agencias") ? "" : agenciaParam;
@@ -36,7 +37,9 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           ISNULL(A.[Telefono 1], '') AS TelefonoFijo1,
           ISNULL(A.[Telefono 2], '') AS TelefonoFijo2,
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
-          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
+          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas,
+          COUNT(*) OVER() AS TotalRegistrosGlobal,
+          AVG(CAST(ISNULL(A.[Avance Cartera], 0) AS FLOAT)) OVER() AS PromedioAvanceGlobal
       FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
           ON A.IdSAsesor = D_AS.IdSAsesor 
@@ -46,7 +49,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
       WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
         ${filtroVistaSQL}
-      ORDER BY A.[Avance Cartera] DESC
+      ORDER BY A.[Avance Cartera] DESC, A.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
 
@@ -57,7 +60,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
       .input('limit', sql.Int, limit)
       .query(querySQL);
 
-    res.json(result.recordset);
+    res.json(result.recordset || []);
   } catch (error) {
     console.error("Error obteniendo Avance de Cartera:", error);
     res.status(500).json({ error: "Error al consultar la base de datos" });
