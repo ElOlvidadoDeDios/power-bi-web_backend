@@ -1,4 +1,4 @@
-// src/routes/mora.ts
+// D:\Proyectos\power-bi-web_backend\src\routes\mora.ts
 import { Router, Request, Response } from "express";
 import { pool } from "../lib/db";
 
@@ -36,22 +36,35 @@ router.get(["/mora", "/api/mora"], async (_req: Request, res: Response) => {
           RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
           ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
           RTRIM(LTRIM(R.[Pagare])) AS pagare,
+          CASE 
+              WHEN R.[Cuenta] IS NULL OR LTRIM(RTRIM(R.[Cuenta])) = '' THEN ''
+              ELSE RIGHT('000000000000' + LTRIM(RTRIM(R.[Cuenta])), 12)
+          END AS cuenta,
           RTRIM(LTRIM(R.[Socio])) AS socio,
           RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
           ISNULL(R.[Monto_Desembolsado], 0) AS montoDesembolsado,
           ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
           ISNULL(R.[Tasa_TEA], 0) AS tasaTea,
           ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
+          ISNULL(R.[Cuotas_Atrasadas], 0) AS cuotasAtrasadas,
           ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
+          ISNULL(R.[Cuotas_Pendientes], 0) AS cuotasPendientes,
+          ISNULL(R.[Cuotas_Pagadas], 0) AS cuotasPagadas,
+          ISNULL(R.[Avance_Cuota], '0%') AS avanceCuota,
           R.[Estado_Mora] AS estadoMora,
-          R.[Nivel_Riesgo_IA] AS nivelRiesgoIa,
+          CASE
+              WHEN R.[Probabilidad_IA] >= 65 THEN 'ALTO'
+              WHEN R.[Probabilidad_IA] >= 30 THEN 'MEDIO'
+              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'BAJO'
+              ELSE R.[Nivel_Riesgo_IA]
+          END AS nivelRiesgoIa,
           R.[Probabilidad_IA] AS probabilidadIa,
           CASE 
               WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'XGBoost EWS v2'
               ELSE NULL 
           END AS modeloIa,
           CASE 
-              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 1 
+              WHEN R.[Probabilidad_IA] >= 30 THEN 1 
               ELSE 0 
           END AS advertidoPorIa,
           ISNULL(R.[Compromiso], '') AS compromiso,
@@ -70,7 +83,7 @@ router.get(["/mora", "/api/mora"], async (_req: Request, res: Response) => {
       WHERE R.[Fecha_Foto] = @UltimaFecha
         AND (
             R.[Estado_Mora] IN ('3. Mora Potencial', '2. Mora Temprana')
-            OR R.[Probabilidad_IA] IS NOT NULL
+            OR R.[Probabilidad_IA] >= 30
         )
       ORDER BY R.[Saldo_Capital] DESC;
     `;

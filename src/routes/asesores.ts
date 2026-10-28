@@ -1,3 +1,4 @@
+// D:\Proyectos\power-bi-web_backend\src\routes\asesores.ts
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
@@ -9,29 +10,38 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
 
   try {
     const request = pool.request();
-    
+
     const result = await request
-      .input('periodo', sql.VarChar(6), periodo)
+      .input("periodo", sql.VarChar(6), periodo)
       .query(`
         WITH CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor 
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, 
+                MAX(AsesorNombresApellidos) AS Asesor 
             FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, 
+                ISNULL(SUM(RepagoReal), 0) AS Repagos 
             FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo 
-            GROUP BY IdSAsesor
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Com AS (
             SELECT 
-                IdSAsesor, 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
                 ISNULL(SUM(Cartera), 0) AS Cartera, 
                 ISNULL(SUM(Mora9), 0) AS MoraCPP, 
                 ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
                 ISNULL(SUM(Mora150), 0) AS Mora150, 
                 ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(MAX(TEA), 0) AS TEA,
                 ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
                 ISNULL(SUM(NroSocios), 0) AS SociosActual,
                 ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
@@ -40,22 +50,29 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo 
-            GROUP BY IdSAsesor
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Metas_Agencia AS (
-            SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAgencia
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Metas_Asesor AS (
-            SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAsesor
+            WHERE Periodo = @periodo 
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_MetasStock_Com AS (
             SELECT A.IdSAsesor, A.IdSAgencia,
                 ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP,
-                ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente,
+                ISNULL(MA.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente,
                 ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
             FROM CTE_Asesores_Com A
             LEFT JOIN CTE_Metas_Agencia MA ON A.IdSAgencia = MA.IdSAgencia
@@ -64,18 +81,19 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
         SELECT 
             CASE A.IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             A.Asesor AS asesor,
-            ISNULL(S.Cartera, 0) AS cartera,
+            ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera,
             ISNULL(F.Desembolsos, 0) AS desembolsos,
             ISNULL(F.Repagos, 0) AS repagos,
             (ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) AS crecimientoBruto,
             ISNULL(S.Mora150, 0) AS mora150,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.Mora150, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMora150,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.Mora150, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMora150,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150,
             CASE WHEN ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) < 20000 THEN 20000 - ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) ELSE 0 END AS faltante20k,
             ISNULL(F.NroOper, 0) AS opAchieved,
+            ISNULL(S.TEA, 0) AS tea,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS duracion,
-            
-            -- NUEVAS COLUMNAS DE SOCIOS
+            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo,
+
             ISNULL(S.SociosInicio, 0) AS sociosInicio,
             ISNULL(S.SociosActual, 0) AS sociosActual,
             (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
@@ -86,14 +104,14 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
             
             ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS carteraInicio,
             ISNULL(S.MoraCPP, 0) AS moraCppActual,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             (MS.MetaMoraCPP * 100) AS metaMoraCpp,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN ((ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100) - (MS.MetaMoraCPP * 100) ELSE 0 END AS excedentePctCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN ((ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100) - (MS.MetaMoraCPP * 100) ELSE 0 END AS excedentePctCpp,
             ISNULL(S.MoraCPP, 0) - (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS excedenteSolesCpp,
             ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
             (MS.MetaMoraDeficiente * 100) AS metaMoraDef,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN ((ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100) - (MS.MetaMoraDeficiente * 100) ELSE 0 END AS excedentePctDef,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN ((ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100) - (MS.MetaMoraDeficiente * 100) ELSE 0 END AS excedentePctDef,
             ISNULL(S.MoraDeficiente, 0) - (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS excedenteSolesDef
         FROM CTE_Asesores_Com A 
         LEFT JOIN CTE_Flow_Com F ON A.IdSAsesor = F.IdSAsesor 

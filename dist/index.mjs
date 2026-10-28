@@ -5881,8 +5881,9 @@ var require_on_finished = __commonJS({
     }
     function isFinished(msg) {
       var socket = msg.socket;
-      if (typeof msg.finished === "boolean") {
-        return Boolean(msg.finished || socket && !socket.writable);
+      var finished = writableEnded(msg);
+      if (typeof finished === "boolean") {
+        return Boolean(finished || socket && !socket.writable);
       }
       if (typeof msg.complete === "boolean") {
         return Boolean(msg.upgrade || !socket || !socket.readable || msg.complete && !msg.readable);
@@ -5961,12 +5962,15 @@ var require_on_finished = __commonJS({
       }
       return res.runInAsyncScope.bind(res, fn, null);
     }
+    function writableEnded(res) {
+      return typeof res.writableEnded === "boolean" ? res.writableEnded : res.finished;
+    }
   }
 });
 
-// node_modules/type-is/node_modules/content-type/dist/index.js
+// node_modules/content-type/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/type-is/node_modules/content-type/dist/index.js"(exports) {
+  "node_modules/content-type/dist/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.format = format;
@@ -15763,141 +15767,173 @@ var require_type_is = __commonJS({
   }
 });
 
-// node_modules/body-parser/node_modules/content-type/dist/index.js
-var require_dist2 = __commonJS({
-  "node_modules/body-parser/node_modules/content-type/dist/index.js"(exports) {
+// node_modules/body-parser/lib/read.js
+var require_read = __commonJS({
+  "node_modules/body-parser/lib/read.js"(exports, module) {
     "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.format = format;
-    exports.parse = parse2;
-    var TEXT_REGEXP = /^[\u0009\u0020-\u007e\u0080-\u00ff]*$/;
-    var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    var QUOTE_REGEXP = /[\\"]/g;
-    var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    var NullObject = /* @__PURE__ */ (() => {
-      const C = function() {
+    var createError = require_http_errors();
+    var getBody = require_raw_body();
+    var iconv = require_lib();
+    var onFinished = require_on_finished();
+    var zlib = __require("node:zlib");
+    var hasBody = require_type_is().hasBody;
+    var contentType = require_dist();
+    module.exports = read;
+    var hasZstandardSupport = "createZstdDecompress" in zlib;
+    function read(req, res, next, parse2, debug, options) {
+      if (onFinished.isFinished(req)) {
+        debug("body already parsed");
+        next();
+        return;
+      }
+      if (!("body" in req)) {
+        req.body = void 0;
+      }
+      if (!hasBody(req)) {
+        debug("skip empty body");
+        next();
+        return;
+      }
+      debug("content-type %j", req.headers["content-type"]);
+      if (!options.shouldParse(req)) {
+        debug("skip parsing");
+        next();
+        return;
+      }
+      let encoding = null;
+      if (options?.skipCharset !== true) {
+        encoding = getCharset(req) || options.defaultCharset;
+        if (!!options?.isValidCharset && !options.isValidCharset(encoding)) {
+          debug("invalid charset");
+          next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
+            charset: encoding,
+            type: "charset.unsupported"
+          }));
+          return;
+        }
+      }
+      let length;
+      let stream;
+      const verify = options.verify;
+      if (verify && encoding !== null && !iconv.encodingExists(encoding)) {
+        return next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
+          charset: encoding.toLowerCase(),
+          type: "charset.unsupported"
+        }));
+      }
+      try {
+        const contentEncoding = (req.headers["content-encoding"] || "identity").toLowerCase();
+        debug('content-encoding "%s"', contentEncoding);
+        if (options.inflate === false && contentEncoding !== "identity") {
+          throw createError(415, "content encoding unsupported", {
+            encoding: contentEncoding,
+            type: "encoding.unsupported"
+          });
+        }
+        if (contentEncoding === "identity") {
+          length = req.headers["content-length"];
+          stream = req;
+        } else {
+          stream = createDecompressionStream(contentEncoding, debug);
+          req.pipe(stream);
+        }
+      } catch (err) {
+        return next(err);
+      }
+      const rawBodyOptions = {
+        length,
+        encoding: verify ? null : encoding,
+        limit: options.limit
       };
-      C.prototype = /* @__PURE__ */ Object.create(null);
-      return C;
-    })();
-    function format(obj) {
-      const { type, parameters } = obj;
-      if (!type || !TYPE_REGEXP.test(type)) {
-        throw new TypeError(`Invalid type: ${type}`);
-      }
-      let result = type;
-      if (parameters) {
-        for (const param of Object.keys(parameters)) {
-          if (!TOKEN_REGEXP.test(param)) {
-            throw new TypeError(`Invalid parameter name: ${param}`);
+      debug("read body");
+      getBody(stream, rawBodyOptions, function(error2, body) {
+        if (error2) {
+          let _error;
+          if (error2.type === "encoding.unsupported") {
+            _error = createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
+              charset: encoding.toLowerCase(),
+              type: "charset.unsupported"
+            });
+          } else {
+            _error = createError(400, error2);
           }
-          result += `; ${param}=${qstring(parameters[param])}`;
-        }
-      }
-      return result;
-    }
-    function parse2(header, options) {
-      const stopChar = options?.comma === true ? COMMA : 65536;
-      const len = header.length;
-      let index = skipOWS(header, options?.start ?? 0, len);
-      const valueStart = index;
-      index = skipValue(header, index, len, stopChar);
-      const valueEnd = trailingOWS(header, valueStart, index);
-      const type = header.slice(valueStart, valueEnd).toLowerCase();
-      if (options?.parameters === false) {
-        return { type, index, parameters: new NullObject() };
-      }
-      return parseParameters(header, type, index, len, stopChar);
-    }
-    var SP = 32;
-    var HTAB = 9;
-    var SEMI = 59;
-    var EQ = 61;
-    var DQUOTE = 34;
-    var BSLASH = 92;
-    var COMMA = 44;
-    function parseParameters(header, type, index, len, stopChar) {
-      const parameters = new NullObject();
-      parameter: while (index < len) {
-        if (header.charCodeAt(index) === stopChar)
-          break;
-        index = skipOWS(header, index + 1, len);
-        const keyStart = index;
-        while (index < len) {
-          const code = header.charCodeAt(index);
-          if (code === stopChar)
-            break parameter;
-          if (code === SEMI)
-            continue parameter;
-          if (code === EQ) {
-            const keyEnd = trailingOWS(header, keyStart, index);
-            const key = header.slice(keyStart, keyEnd).toLowerCase();
-            index = skipOWS(header, index + 1, len);
-            if (index < len && header.charCodeAt(index) === DQUOTE) {
-              index++;
-              let value = "";
-              while (index < len) {
-                const code2 = header.charCodeAt(index++);
-                if (code2 === DQUOTE) {
-                  index = skipValue(header, index, len, stopChar);
-                  if (parameters[key] === void 0)
-                    parameters[key] = value;
-                  break;
-                }
-                if (code2 === BSLASH && index < len) {
-                  value += header[index++];
-                  continue;
-                }
-                value += String.fromCharCode(code2);
-              }
-              continue parameter;
-            }
-            const valueStart = index;
-            index = skipValue(header, index, len, stopChar);
-            if (parameters[key] === void 0) {
-              const valueEnd = trailingOWS(header, valueStart, index);
-              parameters[key] = header.slice(valueStart, valueEnd);
-            }
-            continue parameter;
+          if (stream !== req) {
+            req.unpipe();
+            stream.destroy();
           }
-          index++;
+          dump(req, function onfinished() {
+            next(createError(400, _error));
+          });
+          return;
         }
-      }
-      return { type, index, parameters };
+        if (stream !== req) {
+          req.unpipe(stream);
+          stream.on("error", () => {
+          });
+          stream.destroy();
+          req.resume();
+        }
+        if (verify) {
+          try {
+            debug("verify body");
+            verify(req, res, body, encoding);
+          } catch (err) {
+            next(createError(403, err, {
+              body,
+              type: err.type || "entity.verify.failed"
+            }));
+            return;
+          }
+        }
+        let str = body;
+        try {
+          debug("parse body");
+          str = typeof body !== "string" && encoding !== null ? iconv.decode(body, encoding) : body;
+          req.body = parse2(str, encoding);
+        } catch (err) {
+          next(createError(400, err, {
+            body: str,
+            type: err.type || "entity.parse.failed"
+          }));
+          return;
+        }
+        next();
+      });
     }
-    function skipValue(str, index, len, stopChar) {
-      while (index < len) {
-        const code = str.charCodeAt(index);
-        if (code === SEMI || code === stopChar)
-          break;
-        index++;
+    function createDecompressionStream(encoding, debug) {
+      switch (encoding) {
+        case "deflate":
+          debug("inflate body");
+          return zlib.createInflate();
+        case "gzip":
+          debug("gunzip body");
+          return zlib.createGunzip();
+        case "br":
+          debug("brotli decompress body");
+          return zlib.createBrotliDecompress();
+        case "zstd":
+          if (hasZstandardSupport) {
+            debug("zstd decompress body");
+            return zlib.createZstdDecompress();
+          }
       }
-      return index;
+      throw createError(415, 'unsupported content encoding "' + encoding + '"', {
+        encoding,
+        type: "encoding.unsupported"
+      });
     }
-    function skipOWS(header, index, len) {
-      while (index < len) {
-        const char = header.charCodeAt(index);
-        if (char !== SP && char !== HTAB)
-          break;
-        index++;
+    function dump(req, callback) {
+      if (onFinished.isFinished(req)) {
+        callback(null);
+      } else {
+        onFinished(req, callback);
+        req.resume();
       }
-      return index;
     }
-    function trailingOWS(header, start, end) {
-      while (end > start) {
-        const char = header.charCodeAt(end - 1);
-        if (char !== SP && char !== HTAB)
-          break;
-        end--;
-      }
-      return end;
-    }
-    function qstring(str) {
-      if (TOKEN_REGEXP.test(str))
-        return str;
-      if (TEXT_REGEXP.test(str))
-        return `"${str.replace(QUOTE_REGEXP, "\\$&")}"`;
-      throw new TypeError(`Invalid parameter value: ${str}`);
+    function getCharset(req) {
+      const header = req.headers["content-type"];
+      if (!header) return void 0;
+      return contentType.parse(header).parameters.charset?.toLowerCase();
     }
   }
 });
@@ -15907,18 +15943,11 @@ var require_utils = __commonJS({
   "node_modules/body-parser/lib/utils.js"(exports, module) {
     "use strict";
     var bytes = require_bytes();
-    var contentType = require_dist2();
     var typeis = require_type_is();
     module.exports = {
-      getCharset,
       normalizeOptions,
       passthrough
     };
-    function getCharset(req) {
-      const header = req.headers["content-type"];
-      if (!header) return void 0;
-      return contentType.parse(header).parameters.charset?.toLowerCase();
-    }
     function typeChecker(type) {
       return function checkType(req) {
         return Boolean(typeis(req, type));
@@ -15954,164 +15983,6 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/body-parser/lib/read.js
-var require_read = __commonJS({
-  "node_modules/body-parser/lib/read.js"(exports, module) {
-    "use strict";
-    var createError = require_http_errors();
-    var getBody = require_raw_body();
-    var iconv = require_lib();
-    var onFinished = require_on_finished();
-    var zlib = __require("node:zlib");
-    var hasBody = require_type_is().hasBody;
-    var { getCharset } = require_utils();
-    module.exports = read;
-    function read(req, res, next, parse2, debug, options) {
-      if (onFinished.isFinished(req)) {
-        debug("body already parsed");
-        next();
-        return;
-      }
-      if (!("body" in req)) {
-        req.body = void 0;
-      }
-      if (!hasBody(req)) {
-        debug("skip empty body");
-        next();
-        return;
-      }
-      debug("content-type %j", req.headers["content-type"]);
-      if (!options.shouldParse(req)) {
-        debug("skip parsing");
-        next();
-        return;
-      }
-      let encoding = null;
-      if (options?.skipCharset !== true) {
-        encoding = getCharset(req) || options.defaultCharset;
-        if (!!options?.isValidCharset && !options.isValidCharset(encoding)) {
-          debug("invalid charset");
-          next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
-            charset: encoding,
-            type: "charset.unsupported"
-          }));
-          return;
-        }
-      }
-      let length;
-      const opts = options;
-      let stream;
-      const verify = opts.verify;
-      try {
-        stream = contentstream(req, debug, opts.inflate);
-        length = stream.length;
-        stream.length = void 0;
-      } catch (err) {
-        return next(err);
-      }
-      opts.length = length;
-      opts.encoding = verify ? null : encoding;
-      if (opts.encoding === null && encoding !== null && !iconv.encodingExists(encoding)) {
-        return next(createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
-          charset: encoding.toLowerCase(),
-          type: "charset.unsupported"
-        }));
-      }
-      debug("read body");
-      getBody(stream, opts, function(error2, body) {
-        if (error2) {
-          let _error;
-          if (error2.type === "encoding.unsupported") {
-            _error = createError(415, 'unsupported charset "' + encoding.toUpperCase() + '"', {
-              charset: encoding.toLowerCase(),
-              type: "charset.unsupported"
-            });
-          } else {
-            _error = createError(400, error2);
-          }
-          if (stream !== req) {
-            req.unpipe();
-            stream.destroy();
-          }
-          dump(req, function onfinished() {
-            next(createError(400, _error));
-          });
-          return;
-        }
-        if (verify) {
-          try {
-            debug("verify body");
-            verify(req, res, body, encoding);
-          } catch (err) {
-            next(createError(403, err, {
-              body,
-              type: err.type || "entity.verify.failed"
-            }));
-            return;
-          }
-        }
-        let str = body;
-        try {
-          debug("parse body");
-          str = typeof body !== "string" && encoding !== null ? iconv.decode(body, encoding) : body;
-          req.body = parse2(str, encoding);
-        } catch (err) {
-          next(createError(400, err, {
-            body: str,
-            type: err.type || "entity.parse.failed"
-          }));
-          return;
-        }
-        next();
-      });
-    }
-    function contentstream(req, debug, inflate) {
-      const encoding = (req.headers["content-encoding"] || "identity").toLowerCase();
-      const length = req.headers["content-length"];
-      debug('content-encoding "%s"', encoding);
-      if (inflate === false && encoding !== "identity") {
-        throw createError(415, "content encoding unsupported", {
-          encoding,
-          type: "encoding.unsupported"
-        });
-      }
-      if (encoding === "identity") {
-        req.length = length;
-        return req;
-      }
-      const stream = createDecompressionStream(encoding, debug);
-      req.pipe(stream);
-      return stream;
-    }
-    function createDecompressionStream(encoding, debug) {
-      switch (encoding) {
-        case "deflate":
-          debug("inflate body");
-          return zlib.createInflate();
-        case "gzip":
-          debug("gunzip body");
-          return zlib.createGunzip();
-        case "br":
-          debug("brotli decompress body");
-          return zlib.createBrotliDecompress();
-        default:
-          throw createError(415, 'unsupported content encoding "' + encoding + '"', {
-            encoding,
-            type: "encoding.unsupported"
-          });
-      }
-    }
-    function dump(req, callback) {
-      if (onFinished.isFinished(req)) {
-        callback(null);
-      } else {
-        onFinished(req, callback);
-        req.resume();
-      }
-    }
-  }
-});
-
 // node_modules/body-parser/lib/types/json.js
 var require_json = __commonJS({
   "node_modules/body-parser/lib/types/json.js"(exports, module) {
@@ -16120,7 +15991,7 @@ var require_json = __commonJS({
     var read = require_read();
     var { normalizeOptions } = require_utils();
     module.exports = json;
-    var FIRST_CHAR_REGEXP = /^[\x20\x09\x0a\x0d]*([^\x20\x09\x0a\x0d])/;
+    var FIRST_NON_WHITESPACE_REGEXP = /^[\x20\x09\x0a\x0d]*([^\x20\x09\x0a\x0d]|$)/;
     var JSON_SYNTAX_CHAR = "#";
     var JSON_SYNTAX_REGEXP = /#+/g;
     function json(options) {
@@ -16143,10 +16014,12 @@ var require_json = __commonJS({
           if (body.length === 0) {
             return {};
           }
-          const first = firstchar(body);
-          if (first !== "{" && first !== "[") {
-            debug("strict violation");
-            throw createStrictSyntaxError(body, first);
+          if (body[0] !== "{" && body[0] !== "[") {
+            const first = firstNonWhitespaceChar(body);
+            if (first !== "{" && first !== "[") {
+              debug("strict violation");
+              throw createStrictSyntaxError(body, first);
+            }
           }
           try {
             debug("parse json");
@@ -16192,9 +16065,9 @@ var require_json = __commonJS({
         });
       }
     }
-    function firstchar(str) {
-      const match = FIRST_CHAR_REGEXP.exec(str);
-      return match ? match[1] : void 0;
+    function firstNonWhitespaceChar(str) {
+      const match = FIRST_NON_WHITESPACE_REGEXP.exec(str);
+      return match && match[1] ? match[1] : void 0;
     }
     function normalizeJsonSyntaxError(error2, obj) {
       const keys = Object.getOwnPropertyNames(error2);
@@ -17884,7 +17757,8 @@ var require_formats = __commonJS({
     var percentTwenties = /%20/g;
     var Format = {
       RFC1738: "RFC1738",
-      RFC3986: "RFC3986"
+      RFC3986: "RFC3986",
+      WHATWG: "WHATWG"
     };
     module.exports = {
       "default": Format.RFC3986,
@@ -17894,10 +17768,14 @@ var require_formats = __commonJS({
         },
         RFC3986: function(value) {
           return String(value);
+        },
+        WHATWG: function(value) {
+          return replace.call(value, percentTwenties, "+");
         }
       },
       RFC1738: Format.RFC1738,
-      RFC3986: Format.RFC3986
+      RFC3986: Format.RFC3986,
+      WHATWG: Format.WHATWG
     };
   }
 });
@@ -17924,6 +17802,17 @@ var require_utils2 = __commonJS({
     };
     var setMaxIndex = function setMaxIndex2(obj, maxIndex) {
       overflowChannel.set(obj, maxIndex);
+    };
+    var conflictChannel = getSideChannel();
+    var markConflict = function markConflict2(obj, maxIndex) {
+      conflictChannel.set(obj, maxIndex);
+      return obj;
+    };
+    var isConflict = function isConflict2(obj) {
+      return conflictChannel.has(obj);
+    };
+    var getConflictIndex = function getConflictIndex2(obj) {
+      return conflictChannel.get(obj);
     };
     var hexTable = (function() {
       var array2 = [];
@@ -17968,6 +17857,27 @@ var require_utils2 = __commonJS({
         obj[key] = value;
       }
     };
+    var maxNumericIndex = function maxNumericIndex2(obj, min) {
+      var max = min;
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; ++i) {
+        var num = parseInt(keys[i], 10);
+        if (String(num) === keys[i] && num > max) {
+          max = num;
+        }
+      }
+      return max;
+    };
+    var limitedPair = function limitedPair2(first, second, options) {
+      var pair = [first, second];
+      if (options && typeof options.arrayLimit === "number" && pair.length > options.arrayLimit) {
+        if (options.throwOnLimitExceeded) {
+          throw new RangeError("Array limit exceeded. Only " + options.arrayLimit + " element" + (options.arrayLimit === 1 ? "" : "s") + " allowed in an array.");
+        }
+        return markOverflow(arrayToObject(pair, options), 1);
+      }
+      return pair;
+    };
     var merge2 = function merge3(target, source, options) {
       if (!source) {
         return target;
@@ -17987,13 +17897,21 @@ var require_utils2 = __commonJS({
             var newIndex = getMaxIndex(target) + 1;
             target[newIndex] = source;
             setMaxIndex(target, newIndex);
+          } else if (options && options.strictMerge && isConflict(target)) {
+            var nextConflict = getConflictIndex(target) + 1;
+            if (options.throwOnLimitExceeded && typeof options.arrayLimit === "number" && nextConflict >= options.arrayLimit) {
+              throw new RangeError("Array limit exceeded. Only " + options.arrayLimit + " element" + (options.arrayLimit === 1 ? "" : "s") + " allowed in an array.");
+            }
+            target[nextConflict] = source;
+            markConflict(target, nextConflict);
           } else if (options && options.strictMerge) {
-            return [target, source];
+            var conflict = limitedPair(target, source, options);
+            return isArray(conflict) ? markConflict(conflict, 1) : conflict;
           } else if (options && (options.plainObjects || options.allowPrototypes) || !has.call(Object.prototype, source)) {
             target[source] = true;
           }
         } else {
-          return [target, source];
+          return limitedPair(target, source, options);
         }
         return target;
       }
@@ -18019,6 +17937,9 @@ var require_utils2 = __commonJS({
       var mergeTarget = target;
       if (isArray(target) && !isArray(source)) {
         mergeTarget = arrayToObject(target, options);
+        if (isConflict(target)) {
+          markConflict(mergeTarget, target.length - 1);
+        }
       }
       if (isArray(target) && isArray(source)) {
         source.forEach(function(item, i) {
@@ -18049,12 +17970,18 @@ var require_utils2 = __commonJS({
           setProperty(acc, key, value);
         }
         if (isOverflow(source) && !isOverflow(acc)) {
-          markOverflow(acc, getMaxIndex(source));
+          markOverflow(acc, maxNumericIndex(acc, getMaxIndex(source)));
         }
         if (isOverflow(acc)) {
           var keyNum = parseInt(key, 10);
           if (String(keyNum) === key && keyNum >= 0 && keyNum > getMaxIndex(acc)) {
             setMaxIndex(acc, keyNum);
+          }
+        }
+        if (isConflict(acc)) {
+          var conflictKey = parseInt(key, 10);
+          if (String(conflictKey) === key && conflictKey > getConflictIndex(acc)) {
+            markConflict(acc, conflictKey);
           }
         }
         return acc;
@@ -18067,6 +17994,9 @@ var require_utils2 = __commonJS({
       }, target);
     };
     var decode2 = function(str, defaultDecoder, charset) {
+      if (typeof str === "string" && str.indexOf("%") === -1) {
+        return str.indexOf("+") === -1 ? str : str.replace(/\+/g, " ");
+      }
       var strWithoutPlus = str.replace(/\+/g, " ");
       if (charset === "iso-8859-1") {
         return strWithoutPlus.replace(/%[0-9a-f]{2}/gi, unescape);
@@ -18077,6 +18007,52 @@ var require_utils2 = __commonJS({
         return strWithoutPlus;
       }
     };
+    var hasToPrimitive = typeof Symbol === "function" && typeof Symbol.toPrimitive === "symbol";
+    var arrayJoin = Array.prototype.join;
+    var arrayToString = Array.prototype.toString;
+    var objectToString = Object.prototype.toString;
+    var toCoercible = function toCoercible2(value, joining) {
+      if (!value || typeof value !== "object" && typeof value !== "function") {
+        return value;
+      }
+      if (hasToPrimitive && value[Symbol.toPrimitive] != null) {
+        return value;
+      }
+      if (isArray(value) && value.toString === arrayToString && value.join === arrayJoin) {
+        var ancestors = joining || getSideChannel();
+        if (ancestors.has(value)) {
+          return "";
+        }
+        ancestors.set(value, true);
+        var copy;
+        for (var i = 0; i < value.length; i += 1) {
+          var item = value[i];
+          var coerced = toCoercible2(item, ancestors);
+          if (!copy && coerced !== item) {
+            copy = [];
+            for (var j = 0; j < i; j += 1) {
+              copy[j] = value[j];
+            }
+          }
+          if (copy) {
+            copy[i] = coerced;
+          }
+        }
+        ancestors["delete"](value);
+        return copy || value;
+      }
+      if (typeof value.toString === "function") {
+        return value;
+      }
+      var valueOf = value.valueOf;
+      if (typeof valueOf === "function") {
+        var primitive = valueOf.call(value);
+        if (!primitive || typeof primitive !== "object" && typeof primitive !== "function") {
+          return String(primitive);
+        }
+      }
+      return objectToString.call(value);
+    };
     var limit = 1024;
     var encode2 = function encode3(str, defaultEncoder, charset, kind, format) {
       if (str.length === 0) {
@@ -18086,12 +18062,12 @@ var require_utils2 = __commonJS({
       if (typeof str === "symbol") {
         string3 = Symbol.prototype.toString.call(str);
       } else if (typeof str !== "string") {
-        string3 = String(str);
+        string3 = String(toCoercible(str));
       }
       if (charset === "iso-8859-1") {
         return escape(string3).replace(/%u[0-9a-f]{4}/gi, function($0) {
           return "%26%23" + parseInt($0.slice(2), 16) + "%3B";
-        });
+        }).replace(/\+/g, "%2B");
       }
       var out = "";
       for (var j = 0; j < string3.length; j += limit) {
@@ -18106,7 +18082,7 @@ var require_utils2 = __commonJS({
         var arr = [];
         for (var i = 0; i < segment.length; ++i) {
           var c = segment.charCodeAt(i);
-          if (c === 45 || c === 46 || c === 95 || c === 126 || c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || format === formats.RFC1738 && (c === 40 || c === 41)) {
+          if (c === 45 || c === 46 || c === 95 || c === 126 && format !== formats.WHATWG || c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || format === formats.RFC1738 && (c === 40 || c === 41) || format === formats.WHATWG && c === 42) {
             arr[arr.length] = segment.charAt(i);
             continue;
           }
@@ -18122,9 +18098,14 @@ var require_utils2 = __commonJS({
             arr[arr.length] = hexTable[224 | c >> 12] + hexTable[128 | c >> 6 & 63] + hexTable[128 | c & 63];
             continue;
           }
-          i += 1;
-          c = 65536 + ((c & 1023) << 10 | segment.charCodeAt(i) & 1023);
-          arr[arr.length] = hexTable[240 | c >> 18] + hexTable[128 | c >> 12 & 63] + hexTable[128 | c >> 6 & 63] + hexTable[128 | c & 63];
+          var next = segment.charCodeAt(i + 1);
+          if (c <= 56319 && next >= 56320 && next <= 57343) {
+            i += 1;
+            c = 65536 + ((c & 1023) << 10 | next & 1023);
+            arr[arr.length] = hexTable[240 | c >> 18] + hexTable[128 | c >> 12 & 63] + hexTable[128 | c >> 6 & 63] + hexTable[128 | c & 63];
+          } else {
+            arr[arr.length] = "%EF%BF%BD";
+          }
         }
         out += arr.join("");
       }
@@ -18203,7 +18184,9 @@ var require_utils2 = __commonJS({
       isRegExp,
       markOverflow,
       maybeMap,
-      merge: merge2
+      merge: merge2,
+      setProperty,
+      toCoercible
     };
   }
 });
@@ -18318,20 +18301,20 @@ var require_stringify = __commonJS({
       if (generateArrayPrefix === "comma" && isArray(obj)) {
         if (encodeValuesOnly && encoder) {
           obj = utils.maybeMap(obj, function(v) {
-            return v == null ? v : encoder(v);
+            return v == null ? v : encoder(v, defaults.encoder, charset, "value", format);
           });
         }
-        objKeys = [{ value: obj.length > 0 ? obj.join(",") || null : void 0 }];
+        objKeys = [{ value: obj.length > 0 ? utils.toCoercible(obj).join(",") || null : void 0 }];
       } else if (isArray(filter)) {
         objKeys = filter;
       } else {
         var keys = Object.keys(obj);
         objKeys = sort ? keys.sort(sort) : keys;
       }
-      var encodedPrefix = encodeDotInKeys ? String(prefix).replace(/\./g, "%2E") : String(prefix);
+      var encodedPrefix = String(prefix);
       var adjustedPrefix = commaRoundTrip && isArray(obj) && obj.length === 1 ? encodedPrefix + "[]" : encodedPrefix;
       if (allowEmptyArrays && isArray(obj) && obj.length === 0 && Object.keys(obj).length === 0) {
-        return adjustedPrefix + "[]";
+        return formatter(encoder && !encodeValuesOnly ? encoder(adjustedPrefix, defaults.encoder, charset, "key", format) : adjustedPrefix) + "[]";
       }
       for (var j = 0; j < objKeys.length; ++j) {
         var key = objKeys[j];
@@ -18399,7 +18382,7 @@ var require_stringify = __commonJS({
         filter = opts.filter;
       }
       var arrayFormat;
-      if (opts.arrayFormat in arrayPrefixGenerators) {
+      if (has.call(arrayPrefixGenerators, opts.arrayFormat)) {
         arrayFormat = opts.arrayFormat;
       } else if ("indices" in opts) {
         arrayFormat = opts.indices ? "indices" : "repeat";
@@ -18442,7 +18425,7 @@ var require_stringify = __commonJS({
         filter = options.filter;
         obj = filter("", obj);
       } else if (isArray(options.filter)) {
-        filter = options.filter;
+        filter = options.filter.slice();
         objKeys = filter;
       }
       var keys = [];
@@ -18478,7 +18461,7 @@ var require_stringify = __commonJS({
           options.skipNulls,
           options.encodeDotInKeys,
           options.encode ? options.encoder : null,
-          options.filter,
+          filter,
           options.sort,
           options.allowDots,
           options.serializeDate,
@@ -18509,9 +18492,53 @@ var require_stringify = __commonJS({
 var require_parse = __commonJS({
   "node_modules/qs/lib/parse.js"(exports, module) {
     "use strict";
+    var getSideChannel = require_side_channel();
     var utils = require_utils2();
     var has = Object.prototype.hasOwnProperty;
     var isArray = Array.isArray;
+    var getPrototypeOf = Object.getPrototypeOf;
+    var isPlainContainer = function isPlainContainer2(value) {
+      if (!value || typeof value !== "object") {
+        return false;
+      }
+      if (isArray(value)) {
+        return true;
+      }
+      var proto = getPrototypeOf(value);
+      return proto === Object.prototype || proto === null;
+    };
+    var emptyCopyOf = function emptyCopyOf2(value) {
+      if (isArray(value)) {
+        var arr = [];
+        arr.length = value.length;
+        return arr;
+      }
+      return getPrototypeOf(value) === null ? { __proto__: null } : {};
+    };
+    var copyInput = function copyInput2(input) {
+      var copies = getSideChannel();
+      var result = {};
+      var queue = [{ source: input, target: result }];
+      for (var i = 0; i < queue.length; ++i) {
+        var source = queue[i].source;
+        var target = queue[i].target;
+        var keys = Object.keys(source);
+        for (var j = 0; j < keys.length; ++j) {
+          var value = source[keys[j]];
+          if (isPlainContainer(value)) {
+            if (!copies.has(value)) {
+              var copy = emptyCopyOf(value);
+              copies.set(value, copy);
+              queue[queue.length] = { source: value, target: copy };
+            }
+            utils.setProperty(target, keys[j], copies.get(value));
+          } else {
+            utils.setProperty(target, keys[j], value);
+          }
+        }
+      }
+      return result;
+    };
     var defaults = {
       allowDots: false,
       allowEmptyArrays: false,
@@ -18556,7 +18583,7 @@ var require_parse = __commonJS({
         }
         return val.split(",");
       }
-      if (options.throwOnLimitExceeded && currentArrayLength >= options.arrayLimit) {
+      if (options.throwOnLimitExceeded && currentArrayLength >= options.arrayLimit && currentArrayLength > 0) {
         throw new RangeError("Array limit exceeded. Only " + options.arrayLimit + " element" + (options.arrayLimit === 1 ? "" : "s") + " allowed in an array.");
       }
       return val;
@@ -18598,6 +18625,7 @@ var require_parse = __commonJS({
         var part = parts[i];
         var bracketEqualsPos = part.indexOf("]=");
         var pos = bracketEqualsPos === -1 ? part.indexOf("=") : bracketEqualsPos + 1;
+        var isEmptyBracketKey = pos > 1 && part.slice(pos - 2, pos) === "[]";
         var key;
         var val;
         if (pos === -1) {
@@ -18610,7 +18638,7 @@ var require_parse = __commonJS({
               parseArrayValue(
                 part.slice(pos + 1),
                 options,
-                isArray(obj[key]) ? obj[key].length : 0
+                isArray(obj[key]) && (options.duplicates === "combine" || isEmptyBracketKey) ? obj[key].length : 0
               ),
               function(encodedVal) {
                 return options.decoder(encodedVal, defaults.decoder, charset, "value");
@@ -18619,9 +18647,11 @@ var require_parse = __commonJS({
           }
         }
         if (val && options.interpretNumericEntities && charset === "iso-8859-1") {
-          val = interpretNumericEntities(String(val));
+          val = utils.maybeMap(val, function(value) {
+            return value ? interpretNumericEntities(String(value)) : value;
+          });
         }
-        if (part.indexOf("[]=") > -1) {
+        if (isEmptyBracketKey) {
           val = isArray(val) ? [val] : val;
         }
         if (options.comma && isArray(val) && val.length > options.arrayLimit) {
@@ -18629,7 +18659,7 @@ var require_parse = __commonJS({
         }
         if (key !== null) {
           var existing = has.call(obj, key);
-          if (existing && (options.duplicates === "combine" || part.indexOf("[]=") > -1)) {
+          if (existing && (options.duplicates === "combine" || isEmptyBracketKey)) {
             obj[key] = utils.combine(
               obj[key],
               val,
@@ -18669,7 +18699,7 @@ var require_parse = __commonJS({
         } else {
           obj = options.plainObjects ? { __proto__: null } : {};
           var cleanRoot = root.charAt(0) === "[" && root.charAt(root.length - 1) === "]" ? root.slice(1, -1) : root;
-          var decodedRoot = options.decodeDotInKeys ? cleanRoot.replace(/%2E/g, ".") : cleanRoot;
+          var decodedRoot = options.decodeDotInKeys ? cleanRoot.replace(/%2E/gi, ".") : cleanRoot;
           var index = parseInt(decodedRoot, 10);
           var isValidArrayIndex = !isNaN(index) && root !== decodedRoot && String(index) === decodedRoot && index >= 0 && options.parseArrays;
           if (!options.parseArrays && decodedRoot === "") {
@@ -18690,8 +18720,35 @@ var require_parse = __commonJS({
       }
       return leaf;
     };
+    var topLevelDotsToBrackets = function topLevelDotsToBrackets2(key) {
+      var result = "";
+      var depth = 0;
+      for (var i = 0; i < key.length; i += 1) {
+        var cu = key.charCodeAt(i);
+        if (cu === 91) {
+          depth += 1;
+          result += "[";
+        } else if (cu === 93) {
+          if (depth > 0) {
+            depth -= 1;
+          }
+          result += "]";
+        } else if (cu === 46 && depth === 0 && i + 1 < key.length && key.charCodeAt(i + 1) !== 46 && key.charCodeAt(i + 1) !== 91) {
+          var start = i + 1;
+          var j = start;
+          while (j < key.length && key.charCodeAt(j) !== 46 && key.charCodeAt(j) !== 91) {
+            j += 1;
+          }
+          result += "[" + key.slice(start, j) + "]";
+          i = j - 1;
+        } else {
+          result += key.charAt(i);
+        }
+      }
+      return result;
+    };
     var splitKeyIntoSegments = function splitKeyIntoSegments2(originalKey, options) {
-      var key = options.allowDots ? originalKey.replace(/\.([^.[]+)/g, "[$1]") : originalKey;
+      var key = options.allowDots ? topLevelDotsToBrackets(originalKey) : originalKey;
       if (options.depth <= 0) {
         if (!options.plainObjects && has.call(Object.prototype, key)) {
           if (!options.allowPrototypes) {
@@ -18817,7 +18874,7 @@ var require_parse = __commonJS({
       if (str === "" || str === null || typeof str === "undefined") {
         return options.plainObjects ? { __proto__: null } : {};
       }
-      var tempObj = typeof str === "string" ? parseValues(str, options) : str;
+      var tempObj = typeof str === "string" ? parseValues(str, options) : copyInput(str);
       var obj = options.plainObjects ? { __proto__: null } : {};
       var keys = Object.keys(tempObj);
       for (var i = 0; i < keys.length; ++i) {
@@ -19335,110 +19392,6 @@ var require_view = __commonJS({
       } catch (e) {
         return void 0;
       }
-    }
-  }
-});
-
-// node_modules/content-type/index.js
-var require_content_type = __commonJS({
-  "node_modules/content-type/index.js"(exports) {
-    "use strict";
-    var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
-    var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
-    var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
-    var QUOTE_REGEXP = /([\\"])/g;
-    var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    exports.format = format;
-    exports.parse = parse2;
-    function format(obj) {
-      if (!obj || typeof obj !== "object") {
-        throw new TypeError("argument obj is required");
-      }
-      var parameters = obj.parameters;
-      var type = obj.type;
-      if (!type || !TYPE_REGEXP.test(type)) {
-        throw new TypeError("invalid type");
-      }
-      var string3 = type;
-      if (parameters && typeof parameters === "object") {
-        var param;
-        var params = Object.keys(parameters).sort();
-        for (var i = 0; i < params.length; i++) {
-          param = params[i];
-          if (!TOKEN_REGEXP.test(param)) {
-            throw new TypeError("invalid parameter name");
-          }
-          string3 += "; " + param + "=" + qstring(parameters[param]);
-        }
-      }
-      return string3;
-    }
-    function parse2(string3) {
-      if (!string3) {
-        throw new TypeError("argument string is required");
-      }
-      var header = typeof string3 === "object" ? getcontenttype(string3) : string3;
-      if (typeof header !== "string") {
-        throw new TypeError("argument string is required to be a string");
-      }
-      var index = header.indexOf(";");
-      var type = index !== -1 ? header.slice(0, index).trim() : header.trim();
-      if (!TYPE_REGEXP.test(type)) {
-        throw new TypeError("invalid media type");
-      }
-      var obj = new ContentType(type.toLowerCase());
-      if (index !== -1) {
-        var key;
-        var match;
-        var value;
-        PARAM_REGEXP.lastIndex = index;
-        while (match = PARAM_REGEXP.exec(header)) {
-          if (match.index !== index) {
-            throw new TypeError("invalid parameter format");
-          }
-          index += match[0].length;
-          key = match[1].toLowerCase();
-          value = match[2];
-          if (value.charCodeAt(0) === 34) {
-            value = value.slice(1, -1);
-            if (value.indexOf("\\") !== -1) {
-              value = value.replace(QESC_REGEXP, "$1");
-            }
-          }
-          obj.parameters[key] = value;
-        }
-        if (index !== header.length) {
-          throw new TypeError("invalid parameter format");
-        }
-      }
-      return obj;
-    }
-    function getcontenttype(obj) {
-      var header;
-      if (typeof obj.getHeader === "function") {
-        header = obj.getHeader("content-type");
-      } else if (typeof obj.headers === "object") {
-        header = obj.headers && obj.headers["content-type"];
-      }
-      if (typeof header !== "string") {
-        throw new TypeError("content-type header is missing from object");
-      }
-      return header;
-    }
-    function qstring(val) {
-      var str = String(val);
-      if (TOKEN_REGEXP.test(str)) {
-        return str;
-      }
-      if (str.length > 0 && !TEXT_REGEXP.test(str)) {
-        throw new TypeError("invalid parameter value");
-      }
-      return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
-    }
-    function ContentType(type) {
-      this.parameters = /* @__PURE__ */ Object.create(null);
-      this.type = type;
     }
   }
 });
@@ -20334,7 +20287,7 @@ var require_utils3 = __commonJS({
   "node_modules/express/lib/utils.js"(exports) {
     "use strict";
     var { METHODS } = __require("node:http");
-    var contentType = require_content_type();
+    var contentType = require_dist();
     var etag = require_etag();
     var mime = require_mime_types();
     var proxyaddr = require_proxy_addr();
@@ -20542,7 +20495,7 @@ var require_is_promise = __commonJS({
 });
 
 // node_modules/path-to-regexp/dist/index.js
-var require_dist3 = __commonJS({
+var require_dist2 = __commonJS({
   "node_modules/path-to-regexp/dist/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -20915,7 +20868,7 @@ var require_layer = __commonJS({
   "node_modules/router/lib/layer.js"(exports, module) {
     "use strict";
     var isPromise = require_is_promise();
-    var pathRegexp = require_dist3();
+    var pathRegexp = require_dist2();
     var debug = require_src()("router:layer");
     var deprecate = require_depd()("router");
     var TRAILING_SLASH_REGEXP = /\/+$/;
@@ -21194,27 +21147,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router17;
+    module.exports = Router19;
     module.exports.Route = Route;
-    function Router17(options) {
-      if (!(this instanceof Router17)) {
-        return new Router17(options);
+    function Router19(options) {
+      if (!(this instanceof Router19)) {
+        return new Router19(options);
       }
       const opts = options || {};
-      function router17(req, res, next) {
-        router17.handle(req, res, next);
+      function router19(req, res, next) {
+        router19.handle(req, res, next);
       }
-      Object.setPrototypeOf(router17, this);
-      router17.caseSensitive = opts.caseSensitive;
-      router17.mergeParams = opts.mergeParams;
-      router17.params = {};
-      router17.strict = opts.strict;
-      router17.stack = [];
-      return router17;
+      Object.setPrototypeOf(router19, this);
+      router19.caseSensitive = opts.caseSensitive;
+      router19.mergeParams = opts.mergeParams;
+      router19.params = {};
+      router19.strict = opts.strict;
+      router19.stack = [];
+      return router19;
     }
-    Router17.prototype = function() {
+    Router19.prototype = function() {
     };
-    Router17.prototype.param = function param(name, fn) {
+    Router19.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -21234,7 +21187,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router17.prototype.handle = function handle(req, res, callback) {
+    Router19.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21361,7 +21314,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router17.prototype.use = function use(handler) {
+    Router19.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21394,7 +21347,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router17.prototype.route = function route(path) {
+    Router19.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21409,7 +21362,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router17.prototype[method] = function(path) {
+      Router19.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21592,13 +21545,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router17 = require_router();
+    var Router19 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router17 = null;
+      var router19 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21607,13 +21560,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router17 === null) {
-            router17 = new Router17({
+          if (router19 === null) {
+            router19 = new Router19({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router17;
+          return router19;
         }
       });
     };
@@ -21684,15 +21637,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router17 = this.router;
+      var router19 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router17.use(path, fn2);
+          return router19.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router17.use(path, function mounted_app(req, res, next) {
+        router19.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -21785,7 +21738,7 @@ var require_application = __commonJS({
       var cache = this.cache;
       var done = callback;
       var engines = this.engines;
-      var opts = options;
+      var opts = options || {};
       var view;
       if (typeof options === "function") {
         done = options;
@@ -21827,7 +21780,7 @@ var require_application = __commonJS({
       return server.listen.apply(server, args);
     };
     function logerror(err) {
-      if (this.get("env") !== "test") console.error(err.stack || err.toString());
+      if (this.get("env") !== "test") console.error(err);
     }
     function tryRender(view, options, callback) {
       try {
@@ -21839,150 +21792,11 @@ var require_application = __commonJS({
   }
 });
 
-// node_modules/negotiator/node_modules/content-type/dist/index.js
-var require_dist4 = __commonJS({
-  "node_modules/negotiator/node_modules/content-type/dist/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.format = format;
-    exports.parse = parse2;
-    var TEXT_REGEXP = /^[\u0009\u0020-\u007e\u0080-\u00ff]*$/;
-    var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    var QUOTE_REGEXP = /[\\"]/g;
-    var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-    var NullObject = /* @__PURE__ */ (() => {
-      const C = function() {
-      };
-      C.prototype = /* @__PURE__ */ Object.create(null);
-      return C;
-    })();
-    function format(obj) {
-      const { type, parameters } = obj;
-      if (!type || !TYPE_REGEXP.test(type)) {
-        throw new TypeError(`Invalid type: ${type}`);
-      }
-      let result = type;
-      if (parameters) {
-        for (const param of Object.keys(parameters)) {
-          if (!TOKEN_REGEXP.test(param)) {
-            throw new TypeError(`Invalid parameter name: ${param}`);
-          }
-          result += `; ${param}=${qstring(parameters[param])}`;
-        }
-      }
-      return result;
-    }
-    function parse2(header, options) {
-      const stopChar = options?.comma === true ? COMMA : 65536;
-      const len = header.length;
-      let index = skipOWS(header, options?.start ?? 0, len);
-      const valueStart = index;
-      index = skipValue(header, index, len, stopChar);
-      const valueEnd = trailingOWS(header, valueStart, index);
-      const type = header.slice(valueStart, valueEnd).toLowerCase();
-      if (options?.parameters === false) {
-        return { type, index, parameters: new NullObject() };
-      }
-      return parseParameters(header, type, index, len, stopChar);
-    }
-    var SP = 32;
-    var HTAB = 9;
-    var SEMI = 59;
-    var EQ = 61;
-    var DQUOTE = 34;
-    var BSLASH = 92;
-    var COMMA = 44;
-    function parseParameters(header, type, index, len, stopChar) {
-      const parameters = new NullObject();
-      parameter: while (index < len) {
-        if (header.charCodeAt(index) === stopChar)
-          break;
-        index = skipOWS(header, index + 1, len);
-        const keyStart = index;
-        while (index < len) {
-          const code = header.charCodeAt(index);
-          if (code === stopChar)
-            break parameter;
-          if (code === SEMI)
-            continue parameter;
-          if (code === EQ) {
-            const keyEnd = trailingOWS(header, keyStart, index);
-            const key = header.slice(keyStart, keyEnd).toLowerCase();
-            index = skipOWS(header, index + 1, len);
-            if (index < len && header.charCodeAt(index) === DQUOTE) {
-              index++;
-              let value = "";
-              while (index < len) {
-                const code2 = header.charCodeAt(index++);
-                if (code2 === DQUOTE) {
-                  index = skipValue(header, index, len, stopChar);
-                  if (parameters[key] === void 0)
-                    parameters[key] = value;
-                  break;
-                }
-                if (code2 === BSLASH && index < len) {
-                  value += header[index++];
-                  continue;
-                }
-                value += String.fromCharCode(code2);
-              }
-              continue parameter;
-            }
-            const valueStart = index;
-            index = skipValue(header, index, len, stopChar);
-            if (parameters[key] === void 0) {
-              const valueEnd = trailingOWS(header, valueStart, index);
-              parameters[key] = header.slice(valueStart, valueEnd);
-            }
-            continue parameter;
-          }
-          index++;
-        }
-      }
-      return { type, index, parameters };
-    }
-    function skipValue(str, index, len, stopChar) {
-      while (index < len) {
-        const code = str.charCodeAt(index);
-        if (code === SEMI || code === stopChar)
-          break;
-        index++;
-      }
-      return index;
-    }
-    function skipOWS(header, index, len) {
-      while (index < len) {
-        const char = header.charCodeAt(index);
-        if (char !== SP && char !== HTAB)
-          break;
-        index++;
-      }
-      return index;
-    }
-    function trailingOWS(header, start, end) {
-      while (end > start) {
-        const char = header.charCodeAt(end - 1);
-        if (char !== SP && char !== HTAB)
-          break;
-        end--;
-      }
-      return end;
-    }
-    function qstring(str) {
-      if (TOKEN_REGEXP.test(str))
-        return str;
-      if (TEXT_REGEXP.test(str))
-        return `"${str.replace(QUOTE_REGEXP, "\\$&")}"`;
-      throw new TypeError(`Invalid parameter value: ${str}`);
-    }
-  }
-});
-
 // node_modules/negotiator/lib/accept.js
 var require_accept = __commonJS({
   "node_modules/negotiator/lib/accept.js"(exports, module) {
     "use strict";
-    var contentType = require_dist4();
+    var contentType = require_dist();
     module.exports = parseAccept;
     function parseAccept(header) {
       var values = [];
@@ -22182,7 +21996,7 @@ var require_encoding = __commonJS({
 var require_language = __commonJS({
   "node_modules/negotiator/lib/language.js"(exports, module) {
     "use strict";
-    var contentType = require_dist4();
+    var contentType = require_dist();
     var parseAccept = require_accept();
     module.exports = preferredLanguages;
     module.exports.preferredLanguages = preferredLanguages;
@@ -22266,7 +22080,7 @@ var require_language = __commonJS({
 var require_mediaType = __commonJS({
   "node_modules/negotiator/lib/mediaType.js"(exports, module) {
     "use strict";
-    var contentType = require_dist4();
+    var contentType = require_dist();
     var parseAcceptHeader = require_accept();
     module.exports = preferredMediaTypes;
     module.exports.preferredMediaTypes = preferredMediaTypes;
@@ -22699,9 +22513,9 @@ var require_request = __commonJS({
       var accept = accepts(this);
       return accept.encodings.apply(accept, arguments);
     };
-    req.acceptsCharsets = function() {
-      var accept = accepts(this);
-      return accept.charsets.apply(accept, arguments);
+    req.acceptsCharsets = function(...charsets) {
+      const accept = accepts(this);
+      return accept.charsets(...charsets);
     };
     req.acceptsLanguages = function(...languages) {
       return accepts(this).languages(...languages);
@@ -22768,7 +22582,7 @@ var require_request = __commonJS({
       if (!val || !trust(this.socket.remoteAddress, 0)) {
         val = this.get("Host");
       } else if (val.indexOf(",") !== -1) {
-        val = val.substring(0, val.indexOf(",")).trimRight();
+        val = val.substring(0, val.indexOf(",")).trimEnd();
       }
       return val || void 0;
     });
@@ -22783,7 +22597,7 @@ var require_request = __commonJS({
       var method = this.method;
       var res = this.res;
       var status = res.statusCode;
-      if ("GET" !== method && "HEAD" !== method) return false;
+      if ("GET" !== method && "HEAD" !== method && "QUERY" !== method) return false;
       if (status >= 200 && status < 300 || 304 === status) {
         return fresh(this.headers, {
           "etag": res.get("ETag"),
@@ -22809,181 +22623,270 @@ var require_request = __commonJS({
   }
 });
 
-// node_modules/content-disposition/index.js
-var require_content_disposition = __commonJS({
-  "node_modules/content-disposition/index.js"(exports, module) {
+// node_modules/content-disposition/dist/index.js
+var require_dist3 = __commonJS({
+  "node_modules/content-disposition/dist/index.js"(exports) {
     "use strict";
-    module.exports = contentDisposition;
-    module.exports.parse = parse2;
-    var utf8Decoder = new TextDecoder("utf-8");
-    var ENCODE_URL_ATTR_CHAR_REGEXP = /[\x00-\x20"'()*,/:;<=>?@[\\\]{}\x7f]/g;
-    var NON_LATIN1_REGEXP = /[^\x20-\x7e\xa0-\xff]/g;
-    var QESC_REGEXP = /\\([\u0000-\u007f])/g;
-    var QUOTE_REGEXP = /([\\"])/g;
-    var PARAM_REGEXP = /;[\x09\x20]*([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*=[\x09\x20]*("(?:[\x20!\x23-\x5b\x5d-\x7e\x80-\xff]|\\[\x20-\x7e])*"|[!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*/g;
-    var TEXT_REGEXP = /^[\x20-\x7e\x80-\xff]+$/;
-    var TOKEN_REGEXP = /^[!#$%&'*+.0-9A-Z^_`a-z|~-]+$/;
-    var EXT_VALUE_REGEXP = /^([A-Za-z0-9!#$%&+\-^_`{}~]+)'(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4,8}|)'((?:%[0-9A-Fa-f]{2}|[A-Za-z0-9!#$&+.^_`|~-])+)$/;
-    var DISPOSITION_TYPE_REGEXP = /^([!#$%&'*+.0-9A-Z^_`a-z|~-]+)[\x09\x20]*(?:$|;)/;
-    function contentDisposition(filename, options) {
-      var opts = options || {};
-      var type = opts.type || "attachment";
-      var params = createparams(filename, opts.fallback);
-      return format(new ContentDisposition(type, params));
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.create = create;
+    exports.parse = parse2;
+    exports.decodeExtended = decodeExtended;
+    exports.format = format;
+    exports.encodeExtended = encodeExtended;
+    var NullObject = /* @__PURE__ */ (() => {
+      const C = function() {
+      };
+      C.prototype = /* @__PURE__ */ Object.create(null);
+      return C;
+    })();
+    function create(filename, options) {
+      const type = options?.type || "attachment";
+      const parameters = createParameters(filename, options?.fallback);
+      return format({ type, parameters }, { extended: false });
     }
-    function createparams(filename, fallback) {
-      if (filename === void 0) {
-        return;
-      }
-      var params = {};
-      if (typeof filename !== "string") {
-        throw new TypeError("filename must be a string");
-      }
-      if (fallback === void 0) {
-        fallback = true;
-      }
-      if (typeof fallback !== "string" && typeof fallback !== "boolean") {
-        throw new TypeError("fallback must be a string or boolean");
-      }
-      if (typeof fallback === "string" && NON_LATIN1_REGEXP.test(fallback)) {
-        throw new TypeError("fallback must be ISO-8859-1 string");
-      }
-      var name = basename(filename);
-      var isQuotedString = TEXT_REGEXP.test(name);
-      var fallbackName = typeof fallback !== "string" ? fallback && getlatin1(name) : basename(fallback);
-      var hasFallback = typeof fallbackName === "string" && fallbackName !== name;
-      if (hasFallback || !isQuotedString || hasHexEscape(name)) {
-        params["filename*"] = name;
-      }
-      if (isQuotedString || hasFallback) {
-        params.filename = hasFallback ? fallbackName : name;
-      }
-      return params;
-    }
-    function format(obj) {
-      var parameters = obj.parameters;
-      var type = obj.type;
-      if (!type || typeof type !== "string" || !TOKEN_REGEXP.test(type)) {
-        throw new TypeError("invalid type");
-      }
-      var string3 = String(type).toLowerCase();
-      if (parameters && typeof parameters === "object") {
-        var param;
-        var params = Object.keys(parameters).sort();
-        for (var i = 0; i < params.length; i++) {
-          param = params[i];
-          var val = param.slice(-1) === "*" ? ustring(parameters[param]) : qstring(parameters[param]);
-          string3 += "; " + param + "=" + val;
+    var SP = 32;
+    var HTAB = 9;
+    var SEMI = 59;
+    var EQ = 61;
+    var DQUOTE = 34;
+    var BSLASH = 92;
+    var ASTERISK = 42;
+    function parse2(header, options) {
+      const len = header.length;
+      const multipart = options?.multipart === true;
+      const extended2 = options?.extended !== false;
+      let index = skipOWS(header, 0, header.length);
+      const typeStart = index;
+      index = parseToken(header, index, len);
+      const typeEnd = trailingOWS(header, typeStart, index);
+      const type = header.slice(typeStart, typeEnd).toLowerCase();
+      const parameters = new NullObject();
+      parameter: while (index < len) {
+        index = skipOWS(header, index + 1, len);
+        const keyStart = index;
+        while (index < len) {
+          const char = header.charCodeAt(index);
+          if (char === SEMI)
+            continue parameter;
+          if (char === EQ) {
+            const keyEnd = trailingOWS(header, keyStart, index);
+            const key = header.slice(keyStart, keyEnd).toLowerCase();
+            index = skipOWS(header, index + 1, len);
+            if (index < len && header.charCodeAt(index) === DQUOTE) {
+              index++;
+              let value2 = "";
+              if (multipart) {
+                while (index < len) {
+                  const code = header.charCodeAt(index++);
+                  if (code === DQUOTE) {
+                    index = parseToken(header, index, len);
+                    if (parameters[key] === void 0)
+                      parameters[key] = value2;
+                    break;
+                  }
+                  if (code === /* % */
+                  37 && index + 1 < len) {
+                    const code2 = header.charCodeAt(index);
+                    const code3 = header.charCodeAt(index + 1);
+                    if (code2 === 50 && code3 === 50) {
+                      value2 += '"';
+                      index += 2;
+                      continue;
+                    }
+                    if (code2 === 48) {
+                      if (code3 === 100 || code3 === 68) {
+                        value2 += "\r";
+                        index += 2;
+                        continue;
+                      }
+                      if (code3 === 97 || code3 === 65) {
+                        value2 += "\n";
+                        index += 2;
+                        continue;
+                      }
+                    }
+                  }
+                  value2 += String.fromCharCode(code);
+                }
+              } else {
+                while (index < len) {
+                  const code = header.charCodeAt(index++);
+                  if (code === DQUOTE) {
+                    index = parseToken(header, index, len);
+                    if (parameters[key] === void 0)
+                      parameters[key] = value2;
+                    break;
+                  }
+                  if (code === BSLASH && index < len) {
+                    value2 += header[index++];
+                    continue;
+                  }
+                  value2 += String.fromCharCode(code);
+                }
+              }
+              continue parameter;
+            }
+            const valueStart = index;
+            index = parseToken(header, index, len);
+            const valueEnd = trailingOWS(header, valueStart, index);
+            const value = header.slice(valueStart, valueEnd);
+            if (parameters[key] === void 0) {
+              parameters[key] = value;
+              if (extended2 && key.charCodeAt(key.length - 1) === ASTERISK) {
+                const normalizedKey = key.slice(0, -1);
+                const decoded = decodeExtended(value);
+                if (decoded !== void 0)
+                  parameters[normalizedKey] = decoded;
+              }
+            }
+            continue parameter;
+          }
+          index++;
         }
       }
-      return string3;
+      return { type, parameters };
     }
-    function decodefield(str) {
-      const match = EXT_VALUE_REGEXP.exec(str);
-      if (!match) {
-        throw new TypeError("invalid extended field value");
+    var ENCODE_URL_ATTR_CHAR_REGEXP = /[\x00-\x20"'()*,/:;<=>?@[\\\]{}\x7f]/g;
+    var NON_ASCII_REGEXP = /[^\x20-\x7e]/g;
+    var QUOTE_REGEXP = /[\\"]/g;
+    var INVALID_FILENAME_REGEXP = /%[0-9A-Fa-f]{2}/;
+    var TEXT_REGEXP = /^[\x20-\x7e\x80-\xff]*$/;
+    var ASCII_TEXT_REGEXP = /^[\x20-\x7e]*$/;
+    var TOKEN_REGEXP = /^[!#$%&'*+.0-9A-Z^_`a-z|~-]+$/;
+    function createParameters(filename, fallback = true) {
+      if (filename === void 0)
+        return;
+      if (typeof fallback === "string") {
+        if (!ASCII_TEXT_REGEXP.test(fallback)) {
+          throw new TypeError("Fallback must be valid US-ASCII: " + fallback);
+        }
+        if (fallback === filename)
+          return { filename };
+        return { filename: fallback, "filename*": encodeExtended(filename) };
       }
-      const charset = match[1].toLowerCase();
-      const encoded = match[2];
+      if (ASCII_TEXT_REGEXP.test(filename) && !INVALID_FILENAME_REGEXP.test(filename)) {
+        return { filename };
+      }
+      if (fallback === false) {
+        return { "filename*": encodeExtended(filename) };
+      }
+      return {
+        filename: getAscii(filename),
+        "filename*": encodeExtended(filename)
+      };
+    }
+    function decodeExtended(str) {
+      const charsetEnd = str.indexOf("'");
+      if (charsetEnd <= 0) {
+        return void 0;
+      }
+      const languageEnd = str.indexOf("'", charsetEnd + 1);
+      if (languageEnd === -1) {
+        return void 0;
+      }
+      const charset = str.slice(0, charsetEnd).toLowerCase();
+      const encoded = str.slice(languageEnd + 1);
       switch (charset) {
         case "iso-8859-1": {
-          const binary = decodeHexEscapes(encoded);
-          return getlatin1(binary);
+          return decodeHexEscapes(encoded);
         }
         case "utf-8":
         case "utf8": {
-          try {
-            return decodeURIComponent(encoded);
-          } catch {
-            const binary = decodeHexEscapes(encoded);
-            const bytes = new Uint8Array(binary.length);
-            for (let idx = 0; idx < binary.length; idx++) {
-              bytes[idx] = binary.charCodeAt(idx);
-            }
-            return utf8Decoder.decode(bytes);
-          }
+          return tryDecodeURIComponent(encoded);
         }
       }
-      throw new TypeError("unsupported charset in extended field");
+      return void 0;
     }
-    function getlatin1(val) {
-      return String(val).replace(NON_LATIN1_REGEXP, "?");
-    }
-    function parse2(string3) {
-      if (!string3 || typeof string3 !== "string") {
-        throw new TypeError("argument string is required");
+    function tryDecodeURIComponent(str) {
+      try {
+        return decodeURIComponent(str);
+      } catch {
+        return void 0;
       }
-      var match = DISPOSITION_TYPE_REGEXP.exec(string3);
-      if (!match) {
-        throw new TypeError("invalid type format");
+    }
+    function parseToken(str, index, len) {
+      while (index < len) {
+        const char = str.charCodeAt(index);
+        if (char === SEMI)
+          break;
+        index++;
       }
-      var index = match[0].length;
-      var type = match[1].toLowerCase();
-      var key;
-      var names = [];
-      var params = {};
-      var value;
-      index = PARAM_REGEXP.lastIndex = match[0].slice(-1) === ";" ? index - 1 : index;
-      while (match = PARAM_REGEXP.exec(string3)) {
-        if (match.index !== index) {
-          throw new TypeError("invalid parameter format");
-        }
-        index += match[0].length;
-        key = match[1].toLowerCase();
-        value = match[2];
-        if (names.indexOf(key) !== -1) {
-          throw new TypeError("invalid duplicate parameter");
-        }
-        names.push(key);
-        if (key.indexOf("*") + 1 === key.length) {
-          key = key.slice(0, -1);
-          value = decodefield(value);
-          params[key] = value;
-          continue;
-        }
-        if (typeof params[key] === "string") {
-          continue;
-        }
-        if (value[0] === '"') {
-          value = value.slice(1, -1).replace(QESC_REGEXP, "$1");
-        }
-        params[key] = value;
+      return index;
+    }
+    function skipOWS(str, index, len) {
+      while (index < len) {
+        const char = str.charCodeAt(index);
+        if (char !== SP && char !== HTAB)
+          break;
+        index++;
       }
-      if (index !== -1 && index !== string3.length) {
-        throw new TypeError("invalid parameter format");
-      }
-      return new ContentDisposition(type, params);
+      return index;
     }
-    function pencode(char) {
-      return "%" + String(char).charCodeAt(0).toString(16).toUpperCase();
-    }
-    function qstring(val) {
-      var str = String(val);
-      return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
-    }
-    function ustring(val) {
-      var str = String(val);
-      var encoded = encodeURIComponent(str).replace(ENCODE_URL_ATTR_CHAR_REGEXP, pencode);
-      return "UTF-8''" + encoded;
-    }
-    function ContentDisposition(type, parameters) {
-      this.type = type;
-      this.parameters = parameters;
-    }
-    function basename(path) {
-      const normalized = path.replaceAll("\\", "/");
-      let end = normalized.length;
-      while (end > 0 && normalized[end - 1] === "/") {
+    function trailingOWS(str, start, end) {
+      while (end > start) {
+        const char = str.charCodeAt(end - 1);
+        if (char !== SP && char !== HTAB)
+          break;
         end--;
       }
-      if (end === 0) {
-        return "";
+      return end;
+    }
+    function format(obj, options) {
+      const { type, parameters } = obj;
+      const multipart = options?.multipart === true;
+      const extended2 = options?.extended !== false;
+      if (!type || !TOKEN_REGEXP.test(type)) {
+        throw new TypeError("Invalid type: " + type);
       }
-      let start = end - 1;
-      while (start >= 0 && normalized[start] !== "/") {
-        start--;
+      let result = type;
+      if (parameters) {
+        for (const param of Object.keys(parameters)) {
+          const value = parameters[param];
+          if (!TOKEN_REGEXP.test(param)) {
+            throw new TypeError("Invalid parameter name: " + param);
+          }
+          if (multipart) {
+            result += "; " + param + "=" + qmultipart(value);
+            continue;
+          }
+          if (TOKEN_REGEXP.test(value)) {
+            result += "; " + param + "=" + value;
+            continue;
+          }
+          if (TEXT_REGEXP.test(value)) {
+            result += "; " + param + "=" + qstring(value);
+            continue;
+          }
+          if (!extended2) {
+            throw new TypeError("Invalid parameter value: " + value);
+          }
+          result += "; " + param + "*=" + encodeExtended(value);
+        }
       }
-      return normalized.slice(start + 1, end);
+      return result;
+    }
+    function getAscii(val) {
+      return val.replace(NON_ASCII_REGEXP, "?");
+    }
+    function pencode(char) {
+      return "%" + char.charCodeAt(0).toString(16).toUpperCase();
+    }
+    function qstring(str) {
+      return '"' + str.replace(QUOTE_REGEXP, "\\$&") + '"';
+    }
+    function qmultipart(str) {
+      return '"' + str.replace(/[\n\r"]/g, multipartEscape) + '"';
+    }
+    function multipartEscape(char) {
+      if (char === "\n")
+        return "%0A";
+      if (char === "\r")
+        return "%0D";
+      return "%22";
+    }
+    function encodeExtended(str) {
+      const encoded = encodeURIComponent(str).replace(ENCODE_URL_ATTR_CHAR_REGEXP, pencode);
+      return "UTF-8''" + encoded;
     }
     function isHexDigit(char) {
       const code = char.charCodeAt(0);
@@ -22991,19 +22894,10 @@ var require_content_disposition = __commonJS({
       code >= 65 && code <= 70 || // A-F
       code >= 97 && code <= 102;
     }
-    function hasHexEscape(str) {
-      const maxIndex = str.length - 3;
-      let lastIndex = -1;
-      while ((lastIndex = str.indexOf("%", lastIndex + 1)) !== -1 && lastIndex <= maxIndex) {
-        if (isHexDigit(str[lastIndex + 1]) && isHexDigit(str[lastIndex + 2])) {
-          return true;
-        }
-      }
-      return false;
-    }
     function decodeHexEscapes(str) {
       const firstEscape = str.indexOf("%");
-      if (firstEscape === -1) return str;
+      if (firstEscape === -1)
+        return str;
       let result = str.slice(0, firstEscape);
       for (let idx = firstEscape; idx < str.length; idx++) {
         if (str[idx] === "%" && idx + 2 < str.length && isHexDigit(str[idx + 1]) && isHexDigit(str[idx + 2])) {
@@ -23762,7 +23656,7 @@ var require_vary = __commonJS({
 var require_response = __commonJS({
   "node_modules/express/lib/response.js"(exports, module) {
     "use strict";
-    var contentDisposition = require_content_disposition();
+    var contentDisposition = require_dist3();
     var createError = require_http_errors();
     var deprecate = require_depd()("express");
     var encodeUrl = require_encodeurl();
@@ -23781,6 +23675,7 @@ var require_response = __commonJS({
     var send = require_send();
     var extname = path.extname;
     var resolve = path.resolve;
+    var basename = path.basename;
     var vary = require_vary();
     var { Buffer: Buffer2 } = __require("node:buffer");
     var res = Object.create(http.ServerResponse.prototype);
@@ -23812,12 +23707,15 @@ var require_response = __commonJS({
       var chunk = body;
       var encoding;
       var req = this.req;
-      var type;
       var app2 = this.app;
       switch (typeof chunk) {
         // string defaulting to html
         case "string":
-          if (!this.get("Content-Type")) {
+          encoding = "utf8";
+          const type = this.get("Content-Type");
+          if (typeof type === "string") {
+            this.set("Content-Type", setCharset(type, "utf-8"));
+          } else {
             this.type("html");
           }
           break;
@@ -23835,13 +23733,6 @@ var require_response = __commonJS({
           }
           break;
       }
-      if (typeof chunk === "string") {
-        encoding = "utf8";
-        type = this.get("Content-Type");
-        if (typeof type === "string") {
-          this.set("Content-Type", setCharset(type, "utf-8"));
-        }
-      }
       var etagFn = app2.get("etag fn");
       var generateETag = !this.get("ETag") && typeof etagFn === "function";
       var len;
@@ -23855,7 +23746,9 @@ var require_response = __commonJS({
           encoding = void 0;
           len = chunk.length;
         }
-        this.set("Content-Length", len);
+        if (!this.get("Transfer-Encoding")) {
+          this.set("Content-Length", len);
+        }
       }
       var etag;
       if (generateETag && len !== void 0) {
@@ -23973,7 +23866,7 @@ var require_response = __commonJS({
         opts = filename;
       }
       var headers = {
-        "Content-Disposition": contentDisposition(name || path2)
+        "Content-Disposition": contentDisposition.create(basename(name || path2))
       };
       if (opts && opts.headers) {
         var keys = Object.keys(opts.headers);
@@ -24016,10 +23909,11 @@ var require_response = __commonJS({
       return this;
     };
     res.attachment = function attachment(filename) {
-      if (filename) {
-        this.type(extname(filename));
+      const name = filename !== void 0 ? basename(filename) : void 0;
+      if (name) {
+        this.type(extname(name));
       }
-      this.set("Content-Disposition", contentDisposition(filename));
+      this.set("Content-Disposition", contentDisposition.create(name));
       return this;
     };
     res.append = function append(field, val) {
@@ -24106,7 +24000,7 @@ var require_response = __commonJS({
         },
         html: function() {
           var u = escapeHtml(address);
-          body = "<p>" + statuses.message[status] + ". Redirecting to " + u + "</p>";
+          body = "<!DOCTYPE html><head><title>" + statuses.message[status] + "</title></head><body><p>" + statuses.message[status] + ". Redirecting to " + u + "</p></body>";
         },
         default: function() {
           body = "";
@@ -24340,7 +24234,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router17 = require_router();
+    var Router19 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24362,8 +24256,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router17.Route;
-    exports.Router = Router17;
+    exports.Route = Router19.Route;
+    exports.Router = Router19;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28977,7 +28871,7 @@ var require_pino = __commonJS({
 var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
-var import_express17 = __toESM(require_express2(), 1);
+var import_express19 = __toESM(require_express2(), 1);
 
 // src/middlewares/errorHandler.ts
 var errorHandler = (err, req, res, next) => {
@@ -29008,7 +28902,7 @@ var errorHandler = (err, req, res, next) => {
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
-var import_express16 = __toESM(require_express2(), 1);
+var import_express18 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -29084,6 +28978,7 @@ __export(util_exports, {
   required: () => required,
   safeExtend: () => safeExtend,
   shallowClone: () => shallowClone,
+  sizeCaps: () => sizeCaps,
   slugify: () => slugify,
   stringifyPrimitive: () => stringifyPrimitive,
   toZod: () => toZod,
@@ -29602,6 +29497,18 @@ function prefixIssues(path, issues) {
 }
 function unwrapMessage(message) {
   return typeof message === "string" ? message : message?.message;
+}
+function sizeCaps(defChecks) {
+  const caps = [];
+  for (const ch of defChecks ?? []) {
+    const d = ch._zod.def;
+    if (!/_(length|size)$|_equals$/.test(d.check))
+      break;
+    const max = d.maximum ?? d.length ?? d.size;
+    if (max >= 0)
+      caps.push([max, ch]);
+  }
+  return caps;
 }
 function attachSchema(issues, start, inst) {
   var _a3;
@@ -30524,7 +30431,7 @@ ${content.join("\n")}
 var version = {
   major: 4,
   minor: 6,
-  patch: 5
+  patch: 7
 };
 
 // node_modules/zod/v4/core/schemas.js
@@ -31032,6 +30939,29 @@ var $ZodNever = /* @__PURE__ */ $constructor("$ZodNever", (inst, def) => {
     return payload;
   };
 });
+function capSize(inst, size) {
+  const caps = sizeCaps(inst._zod.def.checks);
+  if (!caps.length)
+    return;
+  const cap = Math.min(...caps.map((c) => c[0]));
+  const parse2 = inst._zod.parse;
+  inst._zod.parse = (payload, ctx) => {
+    const n = size(payload.value);
+    if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
+      for (const [max, ch] of sizeCaps(inst._zod.def.checks)) {
+        if (n > max && ch._zod.def.when(payload)) {
+          const start = payload.issues.length;
+          ch._zod.check(payload);
+          payload.issues[start].continue = false;
+          attachSchema(payload.issues, start, inst);
+          return payload;
+        }
+      }
+    }
+    return parse2(payload, ctx);
+  };
+}
+var arraySize = (input) => Array.isArray(input) ? input.length : -1;
 function handleArrayResult(result, final, index) {
   if (result.issues.length) {
     final.issues.push(...prefixIssues(index, result.issues));
@@ -31075,6 +31005,7 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     }
     return payload;
   };
+  capSize(inst, arraySize);
 });
 function handlePropertyResult(result, final, key, input, optin, optout) {
   const isPresent = key in input;
@@ -34564,15 +34495,59 @@ var import_express3 = __toESM(require_express2(), 1);
 
 // src/middlewares/smartCache.ts
 var buckets = {
-  etl: { name: "etl", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/filtros"]) },
-  gerencial: { name: "gerencial", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set() },
-  ranking: { name: "ranking", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/ranking"]) },
-  mora: { name: "mora", version: "", store: /* @__PURE__ */ new Map(), knownRoutes: /* @__PURE__ */ new Set(["/api/mora", "/api/pagos-mora"]) }
+  etl: {
+    idLog: 1,
+    name: "etl",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "ETL Principal DWH (Cartera, Flujo, Stock y Metas)",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set()
+  },
+  gerencial: {
+    idLog: 2,
+    name: "gerencial",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Actualizador Gerencial (Cancelados y Avance)",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set()
+  },
+  ranking: {
+    idLog: 3,
+    name: "ranking",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Ranking Comercial de Asesores",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set(["/api/ranking"])
+  },
+  mora: {
+    idLog: 4,
+    name: "mora",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Motor de Mora, Compromisos e IA Preventiva",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set(["/api/mora", "/api/pagos-mora"])
+  },
+  vivo: {
+    idLog: 5,
+    name: "vivo",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Productividad en Vivo (Transacmif)",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set(["/api/productividad-en-vivo"])
+  }
 };
 var lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3e3}`;
 var isChecking = false;
 function resolveBucket(path) {
   const p = path.toLowerCase();
+  if (p.includes("productividad-en-vivo")) {
+    return buckets.vivo;
+  }
   if (p.includes("cancelados") || p.includes("avance")) {
     return buckets.gerencial;
   }
@@ -34584,52 +34559,42 @@ function resolveBucket(path) {
   }
   return buckets.etl;
 }
-async function getAllVersions() {
+async function syncVersionsFromDatabase() {
   try {
     const result = await pool.request().query(`
-      SELECT 
-        -- 1. Versi\xF3n del ETL Principal (Id = 1)
-        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 1), 126) AS vEtl,
-        
-        -- 2. Versi\xF3n de Actualizador Gerencial (Id = 2 o firma de respaldo sobre las tablas)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 2), 126),
-          CONCAT(
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] WITH (NOLOCK)), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] WITH (NOLOCK))
-          )
-        ) AS vGerencial,
-
-        -- 3. Versi\xF3n de Ranking (Id = 3 o fecha + suma de puntajes)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 3), 126),
-          CONCAT(
-            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)), 126), '_',
-            CAST((SELECT ISNULL(SUM([Puntaje_Total]), 0) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)) AS VARCHAR(30))
-          )
-        ) AS vRanking,
-
-        -- 4. Versi\xF3n de Mora e IA (Id = 4 o fecha foto + conteo + compromisos)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 4), 126),
-          CONCAT(
-            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)), 126), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK) WHERE [Compromiso] IS NOT NULL), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_pagos_mora_diarios] WITH (NOLOCK))
-          )
-        ) AS vMora
+      SELECT
+        [Id],
+        CONVERT(VARCHAR(30), [UltimaActualizacion], 126) AS VersionIso,
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 HH:mm:ss', 'es-PE') AS FechaFormateada,
+        ISNULL([Descripcion], '') AS Descripcion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
+      WHERE [Id] IN (1, 2, 3, 4, 5)
     `);
-    const row = result.recordset?.[0];
-    if (!row) return null;
-    return {
-      etl: String(row.vEtl || "v1"),
-      gerencial: String(row.vGerencial || "v1"),
-      ranking: String(row.vRanking || "v1"),
-      mora: String(row.vMora || "v1")
-    };
+    const rows = result.recordset || [];
+    const mapById = /* @__PURE__ */ new Map();
+    rows.forEach((r) => mapById.set(Number(r.Id), r));
+    let anyChanged = false;
+    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo"]) {
+      const bucket = buckets[key];
+      const row = mapById.get(bucket.idLog);
+      if (!row) continue;
+      const latestVer = String(row.VersionIso || "v1");
+      bucket.lastFormattedDate = String(row.FechaFormateada || "");
+      if (row.Descripcion) {
+        bucket.description = String(row.Descripcion);
+      }
+      if (bucket.version !== latestVer) {
+        console.log(
+          `\u{1F504} [SmartCache:${key.toUpperCase()} | Id=${bucket.idLog}] Cambio detectado (${bucket.lastFormattedDate}). Refrescando solo sus tablas...`
+        );
+        await refreshBucketRoutes(bucket, latestVer);
+        anyChanged = true;
+      }
+    }
+    return anyChanged;
   } catch (err) {
     console.error("\u26A0\uFE0F [SmartCache] Error leyendo versiones SQL:", err);
-    return null;
+    return false;
   }
 }
 async function refreshBucketRoutes(bucket, newVersion) {
@@ -34637,7 +34602,6 @@ async function refreshBucketRoutes(bucket, newVersion) {
   bucket.store.clear();
   bucket.version = newVersion;
   if (routesToWarm.length === 0) return;
-  console.log(`\u{1F525} [SmartCache:${bucket.name.toUpperCase()}] Refrescando ${routesToWarm.length} rutas en RAM...`);
   const start = Date.now();
   for (let i = 0; i < routesToWarm.length; i += 4) {
     const batch = routesToWarm.slice(i, i + 4);
@@ -34650,32 +34614,64 @@ async function refreshBucketRoutes(bucket, newVersion) {
       )
     );
   }
-  console.log(`\u2705 [SmartCache:${bucket.name.toUpperCase()}] Listo en ${((Date.now() - start) / 1e3).toFixed(2)}s.`);
+  console.log(
+    `\u2705 [SmartCache:${bucket.name.toUpperCase()}] ${routesToWarm.length} rutas actualizadas en RAM en ${((Date.now() - start) / 1e3).toFixed(2)}s.`
+  );
 }
 function startCacheWatcher() {
   const checkLoop = async () => {
     if (isChecking) return;
     isChecking = true;
     try {
-      const versions = await getAllVersions();
-      if (!versions) return;
-      for (const key of ["etl", "gerencial", "ranking", "mora"]) {
-        const bucket = buckets[key];
-        const latestVer = versions[key];
-        if (bucket.version !== latestVer) {
-          console.log(`\u{1F504} [SmartCache:${key.toUpperCase()}] Cambio detectado (${latestVer}). Actualizando su cach\xE9 independiente...`);
-          await refreshBucketRoutes(bucket, latestVer);
-        }
-      }
+      await syncVersionsFromDatabase();
     } finally {
       isChecking = false;
     }
   };
-  setTimeout(checkLoop, 1500);
-  setInterval(checkLoop, 2e4);
+  setTimeout(checkLoop, 1e3);
+  setInterval(checkLoop, 1e4);
 }
 function getCombinedVersionSignature() {
-  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}`;
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}`;
+}
+function getLogsStatusByBucket() {
+  return {
+    etl: {
+      id: 1,
+      descripcion: buckets.etl.description,
+      fechaHora: buckets.etl.lastFormattedDate,
+      etiqueta: `ETL Principal DWH: ${buckets.etl.lastFormattedDate}`,
+      version: buckets.etl.version
+    },
+    gerencial: {
+      id: 2,
+      descripcion: buckets.gerencial.description,
+      fechaHora: buckets.gerencial.lastFormattedDate,
+      etiqueta: `Cancelados y Avance: ${buckets.gerencial.lastFormattedDate}`,
+      version: buckets.gerencial.version
+    },
+    ranking: {
+      id: 3,
+      descripcion: buckets.ranking.description,
+      fechaHora: buckets.ranking.lastFormattedDate,
+      etiqueta: `Ranking Comercial: ${buckets.ranking.lastFormattedDate}`,
+      version: buckets.ranking.version
+    },
+    mora: {
+      id: 4,
+      descripcion: buckets.mora.description,
+      fechaHora: buckets.mora.lastFormattedDate,
+      etiqueta: `Gesti\xF3n de Mora e IA: ${buckets.mora.lastFormattedDate}`,
+      version: buckets.mora.version
+    },
+    vivo: {
+      id: 5,
+      descripcion: buckets.vivo.description,
+      fechaHora: buckets.vivo.lastFormattedDate,
+      etiqueta: `Productividad en Vivo (Transacmif): ${buckets.vivo.lastFormattedDate}`,
+      version: buckets.vivo.version
+    }
+  };
 }
 async function smartCacheMiddleware(req, res, next) {
   if (req.method !== "GET" || req.path.includes("health")) {
@@ -34685,9 +34681,15 @@ async function smartCacheMiddleware(req, res, next) {
   if (host) {
     lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3e3}`;
   }
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   if (req.path.endsWith("/cache-clear")) {
     Object.values(buckets).forEach((b) => b.store.clear());
-    return res.json({ ok: true, message: "Los 4 cach\xE9s fueron limpiados manualmente" });
+    return res.json({ ok: true, message: "Los 5 cach\xE9s fueron limpiados manualmente" });
+  }
+  if (req.path.includes("/filtros")) {
+    return next();
   }
   const activeBucket = resolveBucket(req.path);
   const cacheKey = req.originalUrl;
@@ -34702,7 +34704,7 @@ async function smartCacheMiddleware(req, res, next) {
   res.json = (body) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
-      if (activeBucket.knownRoutes.size < 15 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+      if (activeBucket.knownRoutes.size < 20 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
         activeBucket.knownRoutes.add(req.originalUrl);
       }
     }
@@ -34716,47 +34718,50 @@ async function smartCacheMiddleware(req, res, next) {
 
 // src/routes/filtros.ts
 var router3 = (0, import_express3.Router)();
+var cachedCatalogs = null;
 router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
   try {
-    const periodos = await pool.request().query(`
-      SELECT DISTINCT [Periodo] 
-      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-      WHERE [Periodo] IS NOT NULL
-      ORDER BY [Periodo] DESC
-    `);
-    const asesores = await pool.request().query(`
-      SELECT DISTINCT 
-          [Periodo], 
-          [IdSAgencia], 
-          [IdSAsesor], 
-          [Asesor], 
-          [AsesorNombresApellidos] 
-      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-      WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
-    `);
-    const fechas = await pool.request().query(`
-      SELECT 
-          [Periodo], 
-          CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
-          CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
-      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-      WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
-      ORDER BY [Fecha] DESC
-    `);
-    const logResult = await pool.request().query(`
-      SELECT TOP (1) 
-        FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 hh:mm tt', 'es-PE') AS UltimaActualizacion
-      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      ORDER BY [UltimaActualizacion] DESC
-    `);
-    const ultimaActualizacion = logResult.recordset.length > 0 ? logResult.recordset[0].UltimaActualizacion : "Desconocido";
+    const logs = getLogsStatusByBucket();
+    const currentEtlVer = logs.etl.version;
+    if (!cachedCatalogs || cachedCatalogs.versionEtl !== currentEtlVer) {
+      const [periodos, asesores, fechas] = await Promise.all([
+        pool.request().query(`
+          SELECT DISTINCT RTRIM(LTRIM([Periodo])) AS Periodo
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE [Periodo] IS NOT NULL AND LTRIM(RTRIM([Periodo])) <> ''
+          ORDER BY RTRIM(LTRIM([Periodo])) DESC
+        `),
+        pool.request().query(`
+          SELECT DISTINCT 
+              [Periodo], [IdSAgencia], [IdSAsesor], [Asesor], [AsesorNombresApellidos] 
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
+        `),
+        pool.request().query(`
+          SELECT 
+              [Periodo], 
+              CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
+              CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
+          ORDER BY [Fecha] DESC
+        `)
+      ]);
+      cachedCatalogs = {
+        versionEtl: currentEtlVer,
+        periodos: periodos.recordset.map((p) => p.Periodo),
+        asesores: asesores.recordset,
+        fechas: fechas.recordset
+      };
+    }
     res.json({
-      periodos: periodos.recordset.map((p) => p.Periodo),
-      asesores: asesores.recordset,
-      fechas: fechas.recordset,
-      ultimaActualizacion,
+      periodos: cachedCatalogs.periodos,
+      asesores: cachedCatalogs.asesores,
+      fechas: cachedCatalogs.fechas,
+      ultimaActualizacion: logs.etl.etiqueta,
+      logsPorModulo: logs,
+      // 👈 Contiene las 5 horas y descripciones independientes (etl, gerencial, ranking, mora, vivo)
       versionSignature: getCombinedVersionSignature()
-      // 👈 Firma unificada de los 4 cachés
     });
   } catch (error2) {
     console.error("Error obteniendo filtros:", error2);
@@ -34850,56 +34855,124 @@ router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:perio
         -- QUERY 1: CARTERA COMERCIAL (Excluyendo Recuperadores)
         -- =================================================================
         WITH CTE_Asesores_Comercial AS (
-            SELECT IdSAsesor FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor,
+                MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
+        ),
+        CTE_CarteraInic_Com AS (
+            SELECT 
+                DA.IdSAgencia, 
+                SUM(A.CarteraInicial) AS CarteraInicial
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
+            INNER JOIN CTE_Asesores_Comercial DA ON RTRIM(LTRIM(A.IdSAsesor)) = DA.IdSAsesor
+            WHERE A.Periodo = @periodo
+            GROUP BY DA.IdSAgencia
         ),
         CTE_Flow AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, 
+                ISNULL(SUM(RepagoReal), 0) AS Repagos
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         ),
         CTE_Stock AS (
-            SELECT IdSAgencia, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150, ISNULL(SUM(Varios), 0) AS Varios
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) GROUP BY IdSAgencia
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
+                ISNULL(SUM(Cartera), 0) AS Cartera, 
+                ISNULL(SUM(Mora9), 0) AS MoraCPP, 
+                ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
+                ISNULL(SUM(Mora150), 0) AS Mora150, 
+                ISNULL(SUM(Varios), 0) AS Varios
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Comercial) 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         ),
         CTE_MetasFlow AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumMeta), 0) AS MetaOperacionesBase, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones, ISNULL(SUM(ColocacionMontoMeta), 0) AS MetaMontoBase, ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS MetaMonto
-            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(SUM(ColocacionNumMeta), 0) AS MetaOperacionesBase, 
+                ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones, 
+                ISNULL(SUM(ColocacionMontoMeta), 0) AS MetaMontoBase, 
+                ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS MetaMonto
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) 
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_MetasStock AS (
-            SELECT IdSAgencia, ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) 
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         )
         SELECT 
             CASE ISNULL(COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia), '99') WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
-            ISNULL(S.Cartera, 0) AS cartera, ISNULL(F.NroOper, 0) AS opAchieved, ISNULL(F.Desembolsos, 0) AS amountAchieved, ISNULL(F.Repagos, 0) AS repagos,
-            ISNULL(MF.MetaOperacionesBase, 0) AS opTargetBase, ISNULL(MF.MetaOperaciones, 0) AS opTarget, ISNULL(MF.MetaMontoBase, 0) AS amountTargetBase, ISNULL(MF.MetaMonto, 0) AS amountTarget,
+            ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera, 
+            ISNULL(F.NroOper, 0) AS opAchieved, 
+            ISNULL(F.Desembolsos, 0) AS amountAchieved, 
+            ISNULL(F.Repagos, 0) AS repagos,
+            ISNULL(MF.MetaOperacionesBase, 0) AS opTargetBase, 
+            ISNULL(MF.MetaOperaciones, 0) AS opTarget, 
+            ISNULL(MF.MetaMontoBase, 0) AS amountTargetBase, 
+            ISNULL(MF.MetaMonto, 0) AS amountTarget,
             (ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) AS crecimientoBruto,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS duration,
-            ISNULL(S.MoraCPP, 0) AS moraCPP_soles, ISNULL(S.MoraDeficiente, 0) AS moraDeficiente_soles,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100.0 ELSE 0 END AS cpp,
+            ISNULL(S.MoraCPP, 0) AS moraCPP_soles, 
+            ISNULL(S.MoraDeficiente, 0) AS moraDeficiente_soles,
+            CASE WHEN ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100.0 ELSE 0 END AS cpp,
             ISNULL(MS.MetaMoraCPP, 0.10) * 100.0 AS meta,
-            ISNULL(S.MoraCPP, 0) - (ISNULL(S.Cartera, 0) * ISNULL(MS.MetaMoraCPP, 0.10)) AS excedente
-        FROM CTE_Flow F FULL OUTER JOIN CTE_Stock S ON F.IdSAgencia = S.IdSAgencia FULL OUTER JOIN CTE_MetasFlow MF ON COALESCE(F.IdSAgencia, S.IdSAgencia) = MF.IdSAgencia FULL OUTER JOIN CTE_MetasStock MS ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = MS.IdSAgencia
-        WHERE COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) IS NOT NULL ORDER BY amountAchieved DESC;
+            ISNULL(S.MoraCPP, 0) - (ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) * ISNULL(MS.MetaMoraCPP, 0.10)) AS excedente
+        FROM CTE_Flow F 
+        FULL OUTER JOIN CTE_Stock S ON F.IdSAgencia = S.IdSAgencia 
+        FULL OUTER JOIN CTE_MetasFlow MF ON COALESCE(F.IdSAgencia, S.IdSAgencia) = MF.IdSAgencia 
+        FULL OUTER JOIN CTE_MetasStock MS ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = MS.IdSAgencia
+        LEFT JOIN CTE_CarteraInic_Com CI ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = CI.IdSAgencia
+        WHERE COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) IS NOT NULL 
+        ORDER BY amountAchieved DESC;
 
         -- =================================================================
         -- QUERY 2: CARTERA DE NORMALIZACI\xD3N (Solo Recuperadores, por Asesor)
         -- =================================================================
         WITH CTE_Recuperadores AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, MAX(AsesorNombresApellidos) AS Recuperador 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
+        ),
+        CTE_CarteraInic_Rec AS (
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
+            WHERE Periodo = @periodo
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         )
         SELECT 
             CASE R.IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
-            R.Recuperador AS recuperador, ISNULL(S.Cartera, 0) AS cartera, ISNULL(F.Repagos, 0) AS repagos, ISNULL(S.MoraCPP, 0) AS moraCPP_soles, ISNULL(S.MoraDeficiente, 0) AS moraDeficiente_soles,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100.0 ELSE 0 END AS pctMora9,
+            R.Recuperador AS recuperador, 
+            ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera, 
+            ISNULL(F.Repagos, 0) AS repagos, 
+            ISNULL(S.MoraCPP, 0) AS moraCPP_soles, 
+            ISNULL(S.MoraDeficiente, 0) AS moraDeficiente_soles,
+            CASE WHEN ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(CI.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100.0 ELSE 0 END AS pctMora9,
             (0 - ISNULL(F.Repagos, 0)) - ISNULL(S.MoraDeficiente, 0) AS crecNeto30
-        FROM CTE_Recuperadores R LEFT JOIN CTE_Flow_Rec F ON R.IdSAsesor = F.IdSAsesor LEFT JOIN CTE_Stock_Rec S ON R.IdSAsesor = S.IdSAsesor ORDER BY cartera DESC;
+        FROM CTE_Recuperadores R 
+        LEFT JOIN CTE_Flow_Rec F ON R.IdSAsesor = F.IdSAsesor 
+        LEFT JOIN CTE_Stock_Rec S ON R.IdSAsesor = S.IdSAsesor 
+        LEFT JOIN CTE_CarteraInic_Rec CI ON R.IdSAsesor = CI.IdSAsesor
+        ORDER BY cartera DESC;
       `);
     const recordsets = result.recordsets;
     res.json({
@@ -34923,21 +34996,29 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
     const request = pool.request();
     const result = await request.input("periodo", sql4.VarChar(6), periodo).query(`
         -- =================================================================
-        -- 1. AGENCIA COMPLETA
+        -- 1. AGENCIA COMPLETA (Comerciales + Recuperadores)
         -- =================================================================
         WITH CTE_CarteraInic_All AS (
-            SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
+            SELECT 
+                DA.IdSAgencia, 
+                SUM(A.CarteraInicial) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
+            INNER JOIN (
+                SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia
+                FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
+                WHERE Periodo = @periodo
+                GROUP BY RTRIM(LTRIM(IdSAsesor))
+            ) DA ON RTRIM(LTRIM(A.IdSAsesor)) = DA.IdSAsesor
             WHERE A.Periodo = @periodo
             GROUP BY DA.IdSAgencia
         ),
         CTE_Flow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         ),
         CTE_Stock_All AS (
             SELECT 
-                S.IdSAgencia, 
+                RIGHT('00' + RTRIM(LTRIM(S.IdSAgencia)), 2) AS IdSAgencia, 
                 ISNULL(SUM(S.Cartera), 0) AS Cartera, 
                 ISNULL(SUM(S.Mora9), 0) AS MoraCPP, 
                 ISNULL(SUM(S.Mora31), 0) AS MoraDeficiente, 
@@ -34946,59 +35027,70 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSociosAnterior ELSE 0 END), 0) AS SociosInicio, 
                 ISNULL(SUM(CASE WHEN A.Cargo <> 'RECUPERADOR' OR A.Cargo IS NULL THEN S.NroSocios ELSE 0 END), 0) AS SociosActual
             FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor A WITH (NOLOCK) ON S.IdSAsesor = A.IdSAsesor AND S.Periodo = A.Periodo
+            LEFT JOIN (
+                SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(Cargo) AS Cargo
+                FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
+                WHERE Periodo = @periodo
+                GROUP BY RTRIM(LTRIM(IdSAsesor))
+            ) A ON RTRIM(LTRIM(S.IdSAsesor)) = A.IdSAsesor
             WHERE S.Periodo = @periodo 
-            GROUP BY S.IdSAgencia
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(S.IdSAgencia)), 2)
         ),
         CTE_MetasFlow_All AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones 
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_MetasStock_All AS (
             SELECT 
-                M.IdSAgencia, 
-                ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
-                ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
-                ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
+                RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(M.Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente,
+                COALESCE(MAX(CI.CarteraInicial), MAX(M.CarteraInicial), 0) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
-            LEFT JOIN CTE_CarteraInic_All CI ON M.IdSAgencia = CI.IdSAgencia
+            LEFT JOIN CTE_CarteraInic_All CI ON RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
-            GROUP BY M.IdSAgencia
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_TEA_All AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2), RTRIM(LTRIM(IdSAsesor))) F
+            LEFT JOIN (SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
             CASE ISNULL(COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia), '99') WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150, ISNULL(T.TEA, 0) AS tea, ISNULL(MF.MetaOperaciones, 0) AS opTarget, ISNULL(F.NroOper, 0) AS opAchieved,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo,
-            ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(F.Desembolsos, 0) AS amountAchieved, ISNULL(S.Cartera, 0) AS cartera,
+            ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(F.Desembolsos, 0) AS amountAchieved, 
+            ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera,
             (ISNULL(MS.MetaMoraCPP, 0.10) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual,
-            (ISNULL(MS.MetaMoraDeficiente, 0.05) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual, ISNULL(F.Repagos, 0) AS repagos
+            (ISNULL(MS.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual, ISNULL(F.Repagos, 0) AS repagos
         FROM CTE_Flow_All F FULL OUTER JOIN CTE_Stock_All S ON F.IdSAgencia = S.IdSAgencia FULL OUTER JOIN CTE_MetasFlow_All MF ON COALESCE(F.IdSAgencia, S.IdSAgencia) = MF.IdSAgencia FULL OUTER JOIN CTE_MetasStock_All MS ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = MS.IdSAgencia FULL OUTER JOIN CTE_TEA_All T ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = T.IdSAgencia
         WHERE COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) IS NOT NULL ORDER BY amountAchieved DESC;
 
         -- =================================================================
-        -- 2. AGENCIA COMERCIAL
+        -- 2. AGENCIA COMERCIAL (Solo Analistas Comerciales)
         -- =================================================================
-        WITH CTE_CarteraInic_Comercial AS (
+        WITH CTE_Asesores_Com AS (
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
+        ),
+        CTE_CarteraInic_Comercial AS (
             SELECT DA.IdSAgencia, SUM(A.CarteraInicial) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_asesor_month A WITH (NOLOCK)
-            INNER JOIN DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK) ON A.IdSAsesor = DA.IdSAsesor AND A.Periodo = DA.Periodo
-            WHERE A.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
+            INNER JOIN CTE_Asesores_Com DA ON RTRIM(LTRIM(A.IdSAsesor)) = DA.IdSAsesor
+            WHERE A.Periodo = @periodo
             GROUP BY DA.IdSAgencia
         ),
-        CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-        ),
         CTE_Flow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia
+            SELECT RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         ),
         CTE_Stock_Com AS (
             SELECT 
-                IdSAgencia, 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
                 ISNULL(SUM(Cartera), 0) AS Cartera, 
                 ISNULL(SUM(Mora9), 0) AS MoraCPP, 
                 ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
@@ -35006,47 +35098,51 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
                 ISNULL(SUM(Varios), 0) AS Varios, 
                 ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
                 ISNULL(SUM(NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
-            WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
-            GROUP BY IdSAgencia
+            WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Com) 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         ),
         CTE_MetasFlow_Com AS (
-            SELECT IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS MetaOperaciones 
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_MetasStock_Com AS (
             SELECT 
-                M.IdSAgencia, 
-                ISNULL(SUM(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
-                ISNULL(SUM(M.Mora31Meta), 0.05) AS MetaMoraDeficiente,
+                RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(M.Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(M.Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente,
                 ISNULL(MAX(CI.CarteraInicial), 0) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month M WITH (NOLOCK)
-            LEFT JOIN CTE_CarteraInic_Comercial CI ON M.IdSAgencia = CI.IdSAgencia
+            LEFT JOIN CTE_CarteraInic_Comercial CI ON RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) = CI.IdSAgencia
             WHERE M.Periodo = @periodo 
-            GROUP BY M.IdSAgencia
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_TEA_Com AS (
             SELECT F.IdSAgencia, CASE WHEN SUM(F.Desembolsos) > 0 THEN SUM(F.Desembolsos * ISNULL(S.MaxTEA, 0)) / SUM(F.Desembolsos) ELSE 0 END AS TEA
-            FROM (SELECT IdSAgencia, IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAgencia, IdSAsesor) F
-            LEFT JOIN (SELECT IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND IdSAsesor IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY IdSAsesor) S ON F.IdSAsesor = S.IdSAsesor
+            FROM (SELECT RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, SUM(ColocacionMontoReal) AS Desembolsos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2), RTRIM(LTRIM(IdSAsesor))) F
+            LEFT JOIN (SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(TEA) AS MaxTEA FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo AND RTRIM(LTRIM(IdSAsesor)) IN (SELECT IdSAsesor FROM CTE_Asesores_Com) GROUP BY RTRIM(LTRIM(IdSAsesor))) S ON F.IdSAsesor = S.IdSAsesor
             GROUP BY F.IdSAgencia
         )
         SELECT 
             CASE ISNULL(COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia), '99') WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150, ISNULL(T.TEA, 0) AS tea, ISNULL(MF.MetaOperaciones, 0) AS opTarget, ISNULL(F.NroOper, 0) AS opAchieved,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo,
-            ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(F.Desembolsos, 0) AS amountAchieved, ISNULL(S.Cartera, 0) AS cartera,
+            ISNULL(S.SociosInicio, 0) AS sociosInicio, ISNULL(S.SociosActual, 0) AS sociosActual, ISNULL(F.Desembolsos, 0) AS amountAchieved, 
+            ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera,
             (ISNULL(MS.MetaMoraCPP, 0.10) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, ISNULL(S.MoraCPP, 0) AS moraCppActual,
-            (ISNULL(MS.MetaMoraDeficiente, 0.05) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
+            (ISNULL(MS.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
             ISNULL(F.Repagos, 0) AS repagos,
+            ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
             ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion,
             ISNULL(S.SociosActivos, 0) AS sociosActivos,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
-            (ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS carteraFin,
-            CASE WHEN (ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST((ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCppCf,
-            CASE WHEN (ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST((ISNULL(S.Cartera, 0) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDefCf
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
+            (ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS carteraFin,
+            CASE WHEN (ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST((ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCppCf,
+            CASE WHEN (ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST((ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) + ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0))) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDefCf
         FROM CTE_Flow_Com F FULL OUTER JOIN CTE_Stock_Com S ON F.IdSAgencia = S.IdSAgencia FULL OUTER JOIN CTE_MetasFlow_Com MF ON COALESCE(F.IdSAgencia, S.IdSAgencia) = MF.IdSAgencia FULL OUTER JOIN CTE_MetasStock_Com MS ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = MS.IdSAgencia FULL OUTER JOIN CTE_TEA_Com T ON COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) = T.IdSAgencia
         WHERE COALESCE(F.IdSAgencia, S.IdSAgencia, MF.IdSAgencia) IS NOT NULL ORDER BY amountAchieved DESC;
 
@@ -35054,28 +35150,29 @@ router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, 
         -- 3. RECUPERADORES 
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
-            SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(MAX(Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Metas_Asesor AS (
-            SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Rec_List AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador 
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, MAX(AsesorNombresApellidos) AS Recuperador 
             FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 
-            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 
+            FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_MetasStock_Rec AS (
-            SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
+            SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
             FROM CTE_Rec_List R
             LEFT JOIN CTE_Metas_Agencia MA ON R.IdSAgencia = MA.IdSAgencia
             LEFT JOIN CTE_Metas_Asesor MAS ON R.IdSAsesor = MAS.IdSAsesor
@@ -35123,28 +35220,45 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         -- 1. ASESORES COMERCIALES
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
-            SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAgencia
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Metas_Asesor AS (
-            SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAsesor
+            WHERE Periodo = @periodo 
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor, ISNULL(ColocacionNumMeta, 30) AS MetaAsesor
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, 
+                MAX(AsesorNombresApellidos) AS Asesor, 
+                ISNULL(MAX(ColocacionNumMeta), 30) AS MetaAsesor
             FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, 
+                ISNULL(SUM(RepagoReal), 0) AS Repagos 
             FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAsesor
+            WHERE Periodo = @periodo 
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Com AS (
             SELECT 
-                IdSAsesor, 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
                 ISNULL(SUM(Cartera), 0) AS Cartera, 
                 ISNULL(SUM(Mora9), 0) AS MoraCPP, 
                 ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
@@ -35153,13 +35267,21 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
                 ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
                 ISNULL(SUM(NroSocios), 0) AS SociosActual, 
                 ISNULL(MAX(TEA), 0) AS TEA,
+                ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
+                ISNULL(SUM(NroSociosTraspasados), 0) AS SociosTraspasados,
                 ISNULL(SUM(NroSociosRecuperacion), 0) AS NroSociosRecuperacion, 
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos 
             FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAsesor
+            WHERE Periodo = @periodo 
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_MetasStock_Com AS (
-            SELECT A.IdSAsesor, A.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
+            SELECT 
+                A.IdSAsesor, 
+                A.IdSAgencia, 
+                ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, 
+                ISNULL(MA.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente, 
+                ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
             FROM CTE_Asesores_Com A
             LEFT JOIN CTE_Metas_Agencia MA ON A.IdSAgencia = MA.IdSAgencia
             LEFT JOIN CTE_Metas_Asesor MAS ON A.IdSAsesor = MAS.IdSAsesor
@@ -35175,13 +35297,16 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
             ISNULL(F.NroOper, 0) AS opAchieved,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo, 
             ISNULL(S.SociosInicio, 0) AS sociosInicio, 
-            ISNULL(S.SociosActual, 0) AS sociosActual, 
+            ISNULL(S.SociosActual, 0) AS sociosActual,
+            (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
+            ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
+            ISNULL(S.SociosTraspasados, 0) AS sociosTraspasados,
             ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion, 
             ISNULL(S.SociosActivos, 0) AS sociosActivos, 
-            ISNULL(S.Cartera, 0) AS cartera,
+            ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera,
             (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraCppMax, 
             ISNULL(S.MoraCPP, 0) AS moraCppActual, 
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS moraDefMax, 
             ISNULL(S.MoraDeficiente, 0) AS moraDefActual
         FROM CTE_Asesores_Com A 
@@ -35194,24 +35319,32 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         -- 2. RECUPERADORES
         -- =================================================================
         WITH CTE_Metas_Agencia AS (
-            SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
-            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente
+            FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK) 
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Metas_Asesor AS (
-            SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
-            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Rec_List AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Recuperador FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, MAX(AsesorNombresApellidos) AS Recuperador 
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK) 
+            WHERE Periodo = @periodo AND Cargo = 'RECUPERADOR'
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(ColocacionMontoReal),0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Rec AS (
-            SELECT IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAsesor
+            SELECT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, ISNULL(SUM(Cartera), 0) AS Cartera, ISNULL(SUM(Mora9), 0) AS MoraCPP, ISNULL(SUM(Mora31), 0) AS MoraDeficiente, ISNULL(SUM(Mora150), 0) AS Mora150 FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_MetasStock_Rec AS (
-            SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
+            SELECT R.IdSAsesor, R.IdSAgencia, ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP, ISNULL(MA.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente, ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
             FROM CTE_Rec_List R
             LEFT JOIN CTE_Metas_Agencia MA ON R.IdSAgencia = MA.IdSAgencia
             LEFT JOIN CTE_Metas_Asesor MAS ON R.IdSAsesor = MAS.IdSAsesor
@@ -35226,9 +35359,9 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
         -- 3. RESUMEN DE AGENCIA 
         -- =================================================================
         SELECT 
-            CASE IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
+            CASE RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS opTarget
-        FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY IdSAgencia;
+        FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2);
       `);
     const recordsets = result.recordsets;
     res.json({
@@ -35253,24 +35386,33 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
     const request = pool.request();
     const result = await request.input("periodo", sql6.VarChar(6), periodo).query(`
         WITH CTE_Asesores_Com AS (
-            SELECT IdSAsesor, IdSAgencia, AsesorNombresApellidos AS Asesor 
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia, 
+                MAX(AsesorNombresApellidos) AS Asesor 
             FROM DWH_Gestion_Cartera.dbo.dim_asesor WITH (NOLOCK)
             WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Flow_Com AS (
-            SELECT IdSAsesor, ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, ISNULL(SUM(RepagoReal), 0) AS Repagos 
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS NroOper, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS Desembolsos, 
+                ISNULL(SUM(RepagoReal), 0) AS Repagos 
             FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo 
-            GROUP BY IdSAsesor
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Stock_Com AS (
             SELECT 
-                IdSAsesor, 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
                 ISNULL(SUM(Cartera), 0) AS Cartera, 
                 ISNULL(SUM(Mora9), 0) AS MoraCPP, 
                 ISNULL(SUM(Mora31), 0) AS MoraDeficiente, 
                 ISNULL(SUM(Mora150), 0) AS Mora150, 
                 ISNULL(SUM(Varios), 0) AS Varios, 
+                ISNULL(MAX(TEA), 0) AS TEA,
                 ISNULL(SUM(NroSociosAnterior), 0) AS SociosInicio, 
                 ISNULL(SUM(NroSocios), 0) AS SociosActual,
                 ISNULL(SUM(NroSociosCancelados), 0) AS SociosCancelados,
@@ -35279,22 +35421,29 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
                 ISNULL(SUM(NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock WITH (NOLOCK)
             WHERE Periodo = @periodo 
-            GROUP BY IdSAsesor
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_Metas_Agencia AS (
-            SELECT IdSAgencia, ISNULL(SUM(Mora9Meta), 0.10) AS MetaMoraCPP, ISNULL(SUM(Mora31Meta), 0.05) AS MetaMoraDeficiente
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                ISNULL(MAX(Mora9Meta), 0.10) AS MetaMoraCPP, 
+                ISNULL(MAX(Mora31Meta), CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente
             FROM dm_productividad.dbo.fct_stock_manubl_agencia_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAgencia
+            WHERE Periodo = @periodo 
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Metas_Asesor AS (
-            SELECT IdSAsesor, ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                ISNULL(SUM(CarteraInicial), 0) AS CarteraInicial
             FROM dm_productividad.dbo.fct_stock_manubl_asesor_month WITH (NOLOCK)
-            WHERE Periodo = @periodo GROUP BY IdSAsesor
+            WHERE Periodo = @periodo 
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
         ),
         CTE_MetasStock_Com AS (
             SELECT A.IdSAsesor, A.IdSAgencia,
                 ISNULL(MA.MetaMoraCPP, 0.10) AS MetaMoraCPP,
-                ISNULL(MA.MetaMoraDeficiente, 0.05) AS MetaMoraDeficiente,
+                ISNULL(MA.MetaMoraDeficiente, CASE WHEN @periodo >= '202610' THEN 0.023 ELSE 0.02 END) AS MetaMoraDeficiente,
                 ISNULL(MAS.CarteraInicial, 0) AS CarteraInicial
             FROM CTE_Asesores_Com A
             LEFT JOIN CTE_Metas_Agencia MA ON A.IdSAgencia = MA.IdSAgencia
@@ -35303,18 +35452,19 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
         SELECT 
             CASE A.IdSAgencia WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba' WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
             A.Asesor AS asesor,
-            ISNULL(S.Cartera, 0) AS cartera,
+            ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS cartera,
             ISNULL(F.Desembolsos, 0) AS desembolsos,
             ISNULL(F.Repagos, 0) AS repagos,
             (ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) AS crecimientoBruto,
             ISNULL(S.Mora150, 0) AS mora150,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.Mora150, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMora150,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.Mora150, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMora150,
             ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) AS crecimientoNeto150,
             CASE WHEN ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) < 20000 THEN 20000 - ((ISNULL(F.Desembolsos, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150, 0)) ELSE 0 END AS faltante20k,
             ISNULL(F.NroOper, 0) AS opAchieved,
+            ISNULL(S.TEA, 0) AS tea,
             CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS duracion,
-            
-            -- NUEVAS COLUMNAS DE SOCIOS
+            CASE WHEN ISNULL(F.NroOper, 0) > 0 THEN (ISNULL(S.Varios, 0) / CAST(F.NroOper AS FLOAT)) / 5.0 ELSE 0 END AS plazo,
+
             ISNULL(S.SociosInicio, 0) AS sociosInicio,
             ISNULL(S.SociosActual, 0) AS sociosActual,
             (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
@@ -35325,14 +35475,14 @@ router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) =
             
             ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS carteraInicio,
             ISNULL(S.MoraCPP, 0) AS moraCppActual,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             (MS.MetaMoraCPP * 100) AS metaMoraCpp,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN ((ISNULL(S.MoraCPP, 0) / CAST(S.Cartera AS FLOAT)) * 100) - (MS.MetaMoraCPP * 100) ELSE 0 END AS excedentePctCpp,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN ((ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100) - (MS.MetaMoraCPP * 100) ELSE 0 END AS excedentePctCpp,
             ISNULL(S.MoraCPP, 0) - (MS.MetaMoraCPP * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS excedenteSolesCpp,
             ISNULL(S.MoraDeficiente, 0) AS moraDefActual,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
             (MS.MetaMoraDeficiente * 100) AS metaMoraDef,
-            CASE WHEN ISNULL(S.Cartera, 0) > 0 THEN ((ISNULL(S.MoraDeficiente, 0) / CAST(S.Cartera AS FLOAT)) * 100) - (MS.MetaMoraDeficiente * 100) ELSE 0 END AS excedentePctDef,
+            CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN ((ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100) - (MS.MetaMoraDeficiente * 100) ELSE 0 END AS excedentePctDef,
             ISNULL(S.MoraDeficiente, 0) - (MS.MetaMoraDeficiente * ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0))) AS excedenteSolesDef
         FROM CTE_Asesores_Com A 
         LEFT JOIN CTE_Flow_Com F ON A.IdSAsesor = F.IdSAsesor 
@@ -35583,7 +35733,7 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
           CONVERT(VARCHAR(10), C.[Fecha_Cancelacion], 103) AS FechaCancelacion,
           ISNULL(D_AS.Asesor, C.IdSAsesor) AS Asesor,
-          C.Cuenta,
+          RIGHT('000000000000' + LTRIM(RTRIM(CAST(C.Cuenta AS VARCHAR(20)))), 12) AS Cuenta,
           C.Socio,
           C.Pagare,
           C.Producto,
@@ -35654,7 +35804,7 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
           ISNULL(D_AS.Asesor, A.IdSAsesor) AS Asesor,
           ISNULL(A.[Avance Cartera], 0) AS AvanceCartera,
-          A.Cuenta,
+          RIGHT('000000000000' + LTRIM(RTRIM(CAST(A.Cuenta AS VARCHAR(20)))), 12) AS Cuenta,
           A.Pagare,
           A.Socio,
           ISNULL(A.[Celular 1], '') AS Celular1,
@@ -35758,22 +35908,35 @@ router14.get(["/mora", "/api/mora"], async (_req, res) => {
           RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
           ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
           RTRIM(LTRIM(R.[Pagare])) AS pagare,
+          CASE 
+              WHEN R.[Cuenta] IS NULL OR LTRIM(RTRIM(R.[Cuenta])) = '' THEN ''
+              ELSE RIGHT('000000000000' + LTRIM(RTRIM(R.[Cuenta])), 12)
+          END AS cuenta,
           RTRIM(LTRIM(R.[Socio])) AS socio,
           RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
           ISNULL(R.[Monto_Desembolsado], 0) AS montoDesembolsado,
           ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
           ISNULL(R.[Tasa_TEA], 0) AS tasaTea,
           ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
+          ISNULL(R.[Cuotas_Atrasadas], 0) AS cuotasAtrasadas,
           ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
+          ISNULL(R.[Cuotas_Pendientes], 0) AS cuotasPendientes,
+          ISNULL(R.[Cuotas_Pagadas], 0) AS cuotasPagadas,
+          ISNULL(R.[Avance_Cuota], '0%') AS avanceCuota,
           R.[Estado_Mora] AS estadoMora,
-          R.[Nivel_Riesgo_IA] AS nivelRiesgoIa,
+          CASE
+              WHEN R.[Probabilidad_IA] >= 65 THEN 'ALTO'
+              WHEN R.[Probabilidad_IA] >= 30 THEN 'MEDIO'
+              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'BAJO'
+              ELSE R.[Nivel_Riesgo_IA]
+          END AS nivelRiesgoIa,
           R.[Probabilidad_IA] AS probabilidadIa,
           CASE 
               WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'XGBoost EWS v2'
               ELSE NULL 
           END AS modeloIa,
           CASE 
-              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 1 
+              WHEN R.[Probabilidad_IA] >= 30 THEN 1 
               ELSE 0 
           END AS advertidoPorIa,
           ISNULL(R.[Compromiso], '') AS compromiso,
@@ -35792,7 +35955,7 @@ router14.get(["/mora", "/api/mora"], async (_req, res) => {
       WHERE R.[Fecha_Foto] = @UltimaFecha
         AND (
             R.[Estado_Mora] IN ('3. Mora Potencial', '2. Mora Temprana')
-            OR R.[Probabilidad_IA] IS NOT NULL
+            OR R.[Probabilidad_IA] >= 30
         )
       ORDER BY R.[Saldo_Capital] DESC;
     `;
@@ -35850,30 +36013,908 @@ router15.get(["/pagos-mora", "/api/pagos-mora"], async (req, res) => {
 });
 var pagosMora_default = router15;
 
-// src/routes/index.ts
+// src/routes/welcome.ts
+var import_express16 = __toESM(require_express2(), 1);
+import sql11 from "mssql";
 var router16 = (0, import_express16.Router)();
-router16.use(health_default);
-router16.use(preventiva_default);
-router16.use(filtros_default);
-router16.use(calendario_default);
-router16.use(gerencia_default);
-router16.use(supervision_default);
-router16.use(agencia_default);
-router16.use(asesores_default);
-router16.use(diaria_default);
-router16.use(evolucion_default);
-router16.use(cancelados_default);
-router16.use(avance_default);
-router16.use(ranking_default);
-router16.use(mora_default);
-router16.use(pagosMora_default);
-var routes_default = router16;
+var AGENCY_MAP = {
+  "01": "Wanchaq",
+  "02": "San Jer\xF3nimo",
+  "03": "Quillabamba",
+  "04": "Sicuani",
+  "05": "Molino",
+  "06": "Juliaca",
+  "07": "Lima Los Olivos",
+  "08": "Tica Tica",
+  "09": "Magisterio",
+  "10": "Lima SJL",
+  "11": "Chiclayo",
+  "12": "Arequipa",
+  "13": "Pucallpa"
+};
+var NAME_TO_CODE = Object.fromEntries(
+  Object.entries(AGENCY_MAP).map(([k, v]) => [v.toUpperCase(), k])
+);
+var tablesEnsured = false;
+async function ensureWelcomeTables() {
+  if (tablesEnsured) return;
+  await pool.request().query(`
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] (
+        [Fecha] DATE NOT NULL,
+        [IdSAgencia] VARCHAR(2) NOT NULL,
+        [Op_Faltantes_Dia] INT NOT NULL DEFAULT 0,
+        [Crec_Faltante_Dia] FLOAT NOT NULL DEFAULT 0,
+        [Sugerencia_Op_Gerencia] INT NULL,
+        [Sugerencia_Monto_Gerencia] FLOAT NULL,
+        [Proy_Op_Admin] INT NULL,
+        [Proy_Monto_Admin] FLOAT NULL,
+        [Actualizado_Por] VARCHAR(150) NULL,
+        [Rol_Editor] VARCHAR(50) NULL,
+        [Fecha_Actualizacion] DATETIME NOT NULL DEFAULT GETDATE(),
+        PRIMARY KEY ([Fecha], [IdSAgencia])
+      );
+    END
+
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] (
+        [Fecha] DATE NOT NULL,
+        [IdSAsesor] VARCHAR(30) NOT NULL,
+        [IdSAgencia] VARCHAR(2) NOT NULL,
+        [AsesorNombre] VARCHAR(150) NULL,
+        [Meta_Op_Dia] INT NOT NULL DEFAULT 0,
+        [Meta_Monto_Dia] FLOAT NOT NULL DEFAULT 0,
+        [Fecha_Actualizacion] DATETIME NOT NULL DEFAULT GETDATE(),
+        PRIMARY KEY ([Fecha], [IdSAsesor])
+      );
+    END
+
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [Periodo] VARCHAR(6) NOT NULL,
+        [Usuario_Nombre] VARCHAR(150) NOT NULL,
+        [Usuario_Email] VARCHAR(150) NULL,
+        [Usuario_Rol] VARCHAR(60) NULL,
+        [Resumen_Cambio] NVARCHAR(MAX) NULL,
+        [Fecha_Hora] DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    END
+
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] (
+        [Pagare] VARCHAR(40) NOT NULL PRIMARY KEY,
+        [Compromiso_Actual] NVARCHAR(500) NULL,
+        [Fecha_Promesa_Actual] DATE NULL,
+        [Autor_Actual] VARCHAR(150) NULL,
+        [Rol_Actual] VARCHAR(60) NULL,
+        [Fecha_Actualizacion] DATETIME NOT NULL DEFAULT GETDATE(),
+        [Compromiso_Anterior] NVARCHAR(500) NULL,
+        [Fecha_Promesa_Anterior] DATE NULL,
+        [Autor_Anterior] VARCHAR(150) NULL,
+        [Rol_Anterior] VARCHAR(60) NULL,
+        [Fecha_Anterior] DATETIME NULL
+      );
+    END
+
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_historial]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_historial] (
+        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+        [Pagare] VARCHAR(40) NOT NULL,
+        [Compromiso] NVARCHAR(500) NULL,
+        [Fecha_Promesa] DATE NULL,
+        [Autor_Nombre] VARCHAR(150) NULL,
+        [Autor_Rol] VARCHAR(60) NULL,
+        [Fecha_Registro] DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    END
+  `);
+  tablesEnsured = true;
+}
+router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const periodoReq = req.query.periodo || "";
+    const agenciaCodeReq = req.query.id_age || "";
+    const asesorReq = req.query.asesor || "";
+    const periodosRes = await pool.request().query(`
+      SELECT DISTINCT RTRIM(LTRIM([Periodo])) AS Periodo 
+      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+      WHERE [Periodo] IS NOT NULL AND LTRIM(RTRIM([Periodo])) <> ''
+      ORDER BY RTRIM(LTRIM([Periodo])) DESC
+    `);
+    const periodosDisponibles = periodosRes.recordset.map((p) => p.Periodo);
+    const periodo = periodoReq || periodosDisponibles[0] || "202610";
+    const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
+    await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+      IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
+      BEGIN
+        DECLARE @UltimoPeriodoAdmin VARCHAR(6) = (
+          SELECT MAX([Periodo]) FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK)
+        );
+        IF @UltimoPeriodoAdmin IS NOT NULL
+        BEGIN
+          INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
+            ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
+          SELECT
+            @periodo, [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo]
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK)
+          WHERE [Periodo] = @UltimoPeriodoAdmin;
+        END
+      END
+    `);
+    const kpiRequest = pool.request().input("periodo", sql11.VarChar(6), periodo).input("idAgencia", sql11.VarChar(2), idAgencia).input("asesor", sql11.VarChar(150), asesorReq.trim());
+    const kpiResult = await kpiRequest.query(`
+      DECLARE @FechaBase DATE = TRY_CAST(@periodo + '01' AS DATE);
+      DECLARE @periodoAnt VARCHAR(6) = CASE 
+        WHEN @FechaBase IS NOT NULL THEN CONVERT(VARCHAR(6), DATEADD(MONTH, -1, @FechaBase), 112)
+        ELSE ''
+      END;
+
+      WITH AsesoresComerciales AS (
+        -- \u2705 Solo Parte Comercial (Excluye RECUPERADOR para no sumar la cartera de recuperaci\xF3n)
+        SELECT
+          Periodo,
+          RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor,
+          MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia,
+          ISNULL(MAX(ColocacionNumMeta), 30) AS MetaOpAsesor
+        FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+        WHERE Periodo IN (@periodo, @periodoAnt)
+          AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+          AND (@idAgencia = '' OR RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) = @idAgencia)
+          AND (
+            @asesor = ''
+            OR RTRIM(LTRIM(IdSAsesor)) = @asesor
+            OR RTRIM(LTRIM(AsesorNombresApellidos)) LIKE '%' + @asesor + '%'
+            OR RTRIM(LTRIM(Asesor)) LIKE '%' + @asesor + '%'
+          )
+        GROUP BY Periodo, RTRIM(LTRIM(IdSAsesor))
+      ),
+      FlujoPorPeriodo AS (
+        SELECT
+          F.Periodo,
+          RTRIM(LTRIM(F.IdSAsesor)) AS IdSAsesor,
+          ISNULL(SUM(F.ColocacionNumReal), 0) AS opLogradas,
+          ISNULL(SUM(F.ColocacionMontoReal), 0) AS montoLogrado,
+          ISNULL(SUM(F.RepagoReal), 0) AS repagos,
+          ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionNumReal ELSE 0 END), 0) AS opHoy,
+          ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionMontoReal ELSE 0 END), 0) AS montoHoy
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+        WHERE F.Periodo IN (@periodo, @periodoAnt)
+        GROUP BY F.Periodo, RTRIM(LTRIM(F.IdSAsesor))
+      ),
+      StockPorPeriodo AS (
+        SELECT
+          S.Periodo,
+          RTRIM(LTRIM(S.IdSAsesor)) AS IdSAsesor,
+          ISNULL(SUM(S.Cartera), 0) AS carteraStock,
+          ISNULL(SUM(S.Mora9), 0) AS moraCpp,
+          ISNULL(SUM(S.Mora31), 0) AS moraDeficiente,
+          ISNULL(SUM(S.Mora150), 0) AS mora150,
+          ISNULL(SUM(S.NroSociosAnterior), 0) AS sociosInicio,
+          ISNULL(SUM(S.NroSocios), 0) AS sociosActuales,
+          ISNULL(SUM(S.NroSociosActivos), 0) AS sociosActivos,
+          ISNULL(SUM(S.NroSociosCancelados), 0) AS sociosCancelados,
+          ISNULL(SUM(S.NroSociosTraspasados), 0) AS sociosTraspasados,
+          ISNULL(SUM(S.NroSociosRecuperacion), 0) AS sociosRecuperacion,
+          ISNULL(MAX(S.TEA), 0) AS maxTea
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_stock] S WITH (NOLOCK)
+        WHERE S.Periodo IN (@periodo, @periodoAnt)
+        GROUP BY S.Periodo, RTRIM(LTRIM(S.IdSAsesor))
+      ),
+      CarteraInicPorPeriodo AS (
+        SELECT
+          M.Periodo,
+          RTRIM(LTRIM(M.IdSAsesor)) AS IdSAsesor,
+          ISNULL(SUM(M.CarteraInicial), 0) AS carteraInicial
+        FROM [dm_productividad].[dbo].[fct_stock_manubl_asesor_month] M WITH (NOLOCK)
+        WHERE M.Periodo IN (@periodo, @periodoAnt)
+        GROUP BY M.Periodo, RTRIM(LTRIM(M.IdSAsesor))
+      ),
+      ResumenPorPeriodo AS (
+        SELECT
+          A.Periodo,
+          ISNULL(SUM(F.opLogradas), 0) AS opLogradas,
+          ISNULL(SUM(F.montoLogrado), 0) AS montoLogrado,
+          ISNULL(SUM(F.repagos), 0) AS repagos,
+          ISNULL(SUM(F.opHoy), 0) AS opHoy,
+          ISNULL(SUM(F.montoHoy), 0) AS montoHoy,
+          -- \u2705 Cartera Comercial (Solo asesores comerciales, sin recuperadores)
+          ISNULL(SUM(COALESCE(NULLIF(CI.carteraInicial, 0), S.carteraStock, 0)), 0) AS carteraTotal,
+          ISNULL(SUM(S.moraCpp), 0) AS moraCpp,
+          ISNULL(SUM(S.moraDeficiente), 0) AS moraDeficiente,
+          ISNULL(SUM(S.mora150), 0) AS mora150,
+          ISNULL(SUM(S.sociosInicio), 0) AS sociosInicio,
+          ISNULL(SUM(S.sociosActuales), 0) AS sociosActuales,
+          ISNULL(SUM(S.sociosActivos), 0) AS sociosActivos,
+          ISNULL(SUM(S.sociosCancelados), 0) AS sociosCancelados,
+          ISNULL(SUM(S.sociosTraspasados), 0) AS sociosTraspasados,
+          ISNULL(SUM(S.sociosRecuperacion), 0) AS sociosRecuperacion,
+          ISNULL(SUM(A.MetaOpAsesor), 30) AS metaOpIndividual,
+          CASE 
+            WHEN SUM(F.montoLogrado) > 0 THEN SUM(F.montoLogrado * S.maxTea) / SUM(F.montoLogrado)
+            ELSE ISNULL(AVG(S.maxTea), 0)
+          END AS teaPromedio
+        FROM AsesoresComerciales A
+        LEFT JOIN FlujoPorPeriodo F ON A.Periodo = F.Periodo AND A.IdSAsesor = F.IdSAsesor
+        LEFT JOIN StockPorPeriodo S ON A.Periodo = S.Periodo AND A.IdSAsesor = S.IdSAsesor
+        LEFT JOIN CarteraInicPorPeriodo CI ON A.Periodo = CI.Periodo AND A.IdSAsesor = CI.IdSAsesor
+        GROUP BY A.Periodo
+      ),
+      Actual AS (
+        SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodo
+      ),
+      Anterior AS (
+        SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodoAnt
+      ),
+      MetasAgencia AS (
+        SELECT
+          ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS metaOpMensual,
+          ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS metaMontoMensual,
+          ISNULL(SUM(CASE WHEN CrecimientoMetaAjus > 0 THEN CrecimientoMetaAjus ELSE CrecimientoMeta END), 0) AS metaCrecimiento
+        FROM [dm_productividad].[dbo].[FctMensual] WITH (NOLOCK)
+        WHERE Periodo = @periodo
+          AND (@idAgencia = '' OR RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) = @idAgencia)
+      )
+      SELECT
+        @periodoAnt AS periodoAnterior,
+        ISNULL(ACT.opLogradas, 0) AS opLogradas,
+        ISNULL(ANT.opLogradas, 0) AS opLogradasAnt,
+        ISNULL(ACT.montoLogrado, 0) AS montoLogrado,
+        ISNULL(ANT.montoLogrado, 0) AS montoLogradoAnt,
+        ISNULL(ACT.repagos, 0) AS repagos,
+        ISNULL(ANT.repagos, 0) AS repagosAnt,
+        ISNULL(ACT.opHoy, 0) AS opHoy,
+        ISNULL(ACT.montoHoy, 0) AS montoHoy,
+        CASE WHEN @asesor <> '' THEN ISNULL(ACT.metaOpIndividual, 30) ELSE MA.metaOpMensual END AS metaOpMensual,
+        CASE WHEN @asesor <> '' THEN (ISNULL(ACT.metaOpIndividual, 30) * 2500) ELSE MA.metaMontoMensual END AS metaMontoMensual,
+        MA.metaCrecimiento,
+        ISNULL(ACT.carteraTotal, 0) AS carteraTotal,
+        ISNULL(ANT.carteraTotal, 0) AS carteraTotalAnt,
+        (ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) AS crecimientoBruto,
+        (ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) AS crecimientoBrutoAnt,
+        ((ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) - ISNULL(ACT.mora150, 0)) AS crecimientoNeto150,
+        ((ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) - ISNULL(ANT.mora150, 0)) AS crecimientoNeto150Ant,
+        ISNULL(ACT.moraCpp, 0) AS moraCpp,
+        ISNULL(ANT.moraCpp, 0) AS moraCppAnt,
+        ISNULL(ACT.moraDeficiente, 0) AS moraDeficiente,
+        ISNULL(ANT.moraDeficiente, 0) AS moraDeficienteAnt,
+        ISNULL(ACT.mora150, 0) AS mora150,
+        ISNULL(ANT.mora150, 0) AS mora150Ant,
+        ISNULL(ACT.sociosInicio, 0) AS sociosInicio,
+        ISNULL(ANT.sociosInicio, 0) AS sociosInicioAnt,
+        ISNULL(ACT.sociosActuales, 0) AS sociosActuales,
+        ISNULL(ANT.sociosActuales, 0) AS sociosActualesAnt,
+        (ISNULL(ACT.sociosActuales, 0) - ISNULL(ACT.sociosInicio, 0)) AS sociosNuevosNeto,
+        (ISNULL(ANT.sociosActuales, 0) - ISNULL(ANT.sociosInicio, 0)) AS sociosNuevosNetoAnt,
+        ISNULL(ACT.sociosActivos, 0) AS sociosActivos,
+        ISNULL(ANT.sociosActivos, 0) AS sociosActivosAnt,
+        ISNULL(ACT.sociosCancelados, 0) AS sociosCancelados,
+        ISNULL(ANT.sociosCancelados, 0) AS sociosCanceladosAnt,
+        ISNULL(ACT.sociosTraspasados, 0) AS sociosTraspasados,
+        ISNULL(ANT.sociosTraspasados, 0) AS sociosTraspasadosAnt,
+        ISNULL(ACT.sociosRecuperacion, 0) AS sociosRecuperacion,
+        ISNULL(ANT.sociosRecuperacion, 0) AS sociosRecuperacionAnt,
+        (ISNULL(ACT.sociosInicio, 0) - ISNULL(ACT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupe,
+        (ISNULL(ANT.sociosInicio, 0) - ISNULL(ANT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupeAnt,
+        ISNULL(ACT.teaPromedio, 0) AS teaPromedio,
+        ISNULL(ANT.teaPromedio, 0) AS teaPromedioAnt
+      FROM MetasAgencia MA
+      LEFT JOIN Actual ACT ON 1 = 1
+      LEFT JOIN Anterior ANT ON 1 = 1;
+    `);
+    const prodVivoRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+      DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+
+      WITH Agencias AS (
+        SELECT * FROM (VALUES
+          ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
+          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+          ('13', 'Pucallpa')
+        ) AS t(IdSAgencia, NombreAgencia)
+      ),
+      MetasHoy AS (
+        SELECT
+          RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) AS IdSAgencia,
+          ISNULL(ColocacionNumMeta, 0) AS opFaltantesDia,
+          ISNULL(ColocacionMontoMeta, 0) AS crecFaltanteDia,
+          ISNULL(ColocacionNumProy, 0) AS proyOpDia,
+          ISNULL(ColocacionMontoProy, 0) AS proyMontoDia
+        FROM [dm_productividad].[dbo].[FctDiario_MetaProy] WITH (NOLOCK)
+        WHERE Fecha = @Hoy
+      ),
+      ControlHoy AS (
+        SELECT
+          IdSAgencia,
+          Op_Faltantes_Dia,
+          Crec_Faltante_Dia,
+          Sugerencia_Op_Gerencia,
+          Sugerencia_Monto_Gerencia,
+          Proy_Op_Admin,
+          Proy_Monto_Admin,
+          Actualizado_Por,
+          Rol_Editor,
+          CONVERT(VARCHAR(19), Fecha_Actualizacion, 120) AS Fecha_Actualizacion
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+        WHERE Fecha = @Hoy
+      ),
+      SumaAsesoresHoy AS (
+        SELECT
+          IdSAgencia,
+          SUM(Meta_Op_Dia) AS sumaOpAsesores,
+          SUM(Meta_Monto_Dia) AS sumaMontoAsesores
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
+        WHERE Fecha = @Hoy
+        GROUP BY IdSAgencia
+      ),
+      LogradoHoy AS (
+        SELECT
+          RTRIM(LTRIM(IdSAgencia)) AS IdSAgencia,
+          ISNULL(SUM(ColocacionNumReal), 0) AS colocacionNumReal,
+          ISNULL(SUM(ColocacionMontoReal), 0) AS colocacionMontoReal
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
+        WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @Hoy
+        GROUP BY RTRIM(LTRIM(IdSAgencia))
+      )
+      SELECT
+        CONVERT(VARCHAR(10), @Hoy, 120) AS fecha,
+        @periodo AS periodo,
+        A.IdSAgencia AS idAgencia,
+        A.NombreAgencia AS agencia,
+        COALESCE(C.Op_Faltantes_Dia, M.opFaltantesDia, 12) AS opFaltantesDia,
+        COALESCE(C.Crec_Faltante_Dia, M.crecFaltanteDia, 20000) AS crecFaltanteDia,
+        COALESCE(C.Sugerencia_Op_Gerencia, M.proyOpDia, 10) AS sugerenciaOpGerencia,
+        COALESCE(C.Sugerencia_Monto_Gerencia, M.proyMontoDia, 20000) AS sugerenciaMontoGerencia,
+        COALESCE(C.Proy_Op_Admin, M.proyOpDia, C.Sugerencia_Op_Gerencia, 0) AS proyeccionColocacion,
+        COALESCE(C.Proy_Monto_Admin, M.proyMontoDia, C.Sugerencia_Monto_Gerencia, 0) AS proyeccionMonto,
+        ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
+        ISNULL(SA.sumaMontoAsesores, 0) AS sumaMontoAsesores,
+        ISNULL(L.colocacionNumReal, 0) AS colocacionNumReal,
+        ISNULL(L.colocacionMontoReal, 0) AS colocacionMontoReal,
+        ISNULL(C.Actualizado_Por, 'Sistema / Daemon') AS actualizadoPor,
+        ISNULL(C.Rol_Editor, '') AS rolEditor,
+        ISNULL(C.Fecha_Actualizacion, '') AS fechaActualizacion
+      FROM Agencias A
+      LEFT JOIN MetasHoy M ON A.IdSAgencia = M.IdSAgencia
+      LEFT JOIN ControlHoy C ON A.IdSAgencia = C.IdSAgencia
+      LEFT JOIN SumaAsesoresHoy SA ON A.IdSAgencia = SA.IdSAgencia
+      LEFT JOIN LogradoHoy L ON A.IdSAgencia = L.IdSAgencia
+      ORDER BY A.IdSAgencia ASC;
+    `);
+    const metasMensualesRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+      WITH Agencias AS (
+        SELECT * FROM (VALUES
+          ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
+          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+          ('13', 'Pucallpa')
+        ) AS t(IdSAgencia, NombreAgencia)
+      )
+      SELECT
+        @periodo AS periodo,
+        A.IdSAgencia AS idAgencia,
+        A.NombreAgencia AS agencia,
+        ISNULL(M.ColocacionNumMeta, 0) AS colocacionNumMeta,
+        ISNULL(M.ColocacionNumMetaAjus, 0) AS colocacionNumMetaAjus,
+        ISNULL(M.ColocacionMontoMeta, 0) AS colocacionMontoMeta,
+        ISNULL(M.ColocacionMontoMetaAjus, 0) AS colocacionMontoMetaAjus,
+        ISNULL(M.NumeroAsesores, 0) AS numeroAsesores,
+        ISNULL(M.NumeroAsesoresAjus, 0) AS numeroAsesoresAjus,
+        ISNULL(M.CrecimientoMeta, ISNULL(M.CrecimientoMetaAjus, 0)) AS crecimientoMeta,
+        ISNULL(M.CrecimientoMetaAjus, 0) AS crecimientoMetaAjus
+      FROM Agencias A
+      LEFT JOIN [dm_productividad].[dbo].[FctMensual] M WITH (NOLOCK)
+        ON RIGHT('00' + CAST(M.IdSAgencia AS VARCHAR(2)), 2) = A.IdSAgencia
+        AND M.Periodo = @periodo
+      ORDER BY A.IdSAgencia ASC;
+    `);
+    const historialMetasRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+      SELECT TOP 25
+        [Id] AS id,
+        [Periodo] AS periodo,
+        [Usuario_Nombre] AS usuarioNombre,
+        [Usuario_Email] AS usuarioEmail,
+        [Usuario_Rol] AS usuarioRol,
+        [Resumen_Cambio] AS resumenCambio,
+        FORMAT([Fecha_Hora], 'dd/MM/yyyy HH:mm:ss') AS fechaHora
+      FROM [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales] WITH (NOLOCK)
+      ORDER BY [Fecha_Hora] DESC;
+    `);
+    const adminsRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+      WITH Agencias AS (
+        SELECT * FROM (VALUES
+          ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
+          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+          ('13', 'Pucallpa')
+        ) AS t(IdSAgencia, NombreAgencia)
+      )
+      SELECT
+        @periodo AS periodo,
+        A.IdSAgencia AS idAgencia,
+        A.NombreAgencia AS agencia,
+        ISNULL(AD.Nombre, '') AS nombre,
+        ISNULL(AD.Celular, '') AS celular,
+        ISNULL(AD.CorreoPersonal, '') AS correoPersonal,
+        ISNULL(AD.CorreoCorporativo, '') AS correoCorporativo
+      FROM Agencias A
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_administrador] AD WITH (NOLOCK)
+        ON RIGHT('00' + RTRIM(LTRIM(AD.IdSAgencia)), 2) = A.IdSAgencia
+        AND AD.Periodo = @periodo
+      ORDER BY A.IdSAgencia ASC;
+    `);
+    const moraRes = await pool.request().input("idAgencia", sql11.VarChar(2), idAgencia).input("asesor", sql11.VarChar(150), asesorReq.trim()).query(`
+        DECLARE @UltimaFecha DATE = (
+          SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        );
+
+        SELECT
+          R.[IdSAgencia] AS idAgencia,
+          CASE R.[IdSAgencia]
+            WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba'
+            WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
+            WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
+            WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
+            WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia'
+          END AS agencia,
+          RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
+          ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
+          RTRIM(LTRIM(R.[Pagare])) AS pagare,
+          CASE
+            WHEN R.[Cuenta] IS NULL OR LTRIM(RTRIM(R.[Cuenta])) = '' THEN ''
+            ELSE RIGHT('000000000000' + LTRIM(RTRIM(R.[Cuenta])), 12)
+          END AS cuenta,
+          RTRIM(LTRIM(R.[Socio])) AS socio,
+          RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
+          ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
+          ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
+          ISNULL(R.[Cuotas_Atrasadas], 0) AS cuotasAtrasadas,
+          ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
+          ISNULL(R.[Cuotas_Pendientes], 0) AS cuotasPendientes,
+          ISNULL(R.[Cuotas_Pagadas], 0) AS cuotasPagadas,
+          ISNULL(R.[Avance_Cuota], '0%') AS avanceCuota,
+          ISNULL(R.[Telefonos], '') AS telefonos,
+          R.[Probabilidad_IA] AS probabilidadIa,
+          COALESCE(CW.[Compromiso_Actual], R.[Compromiso], '') AS compromiso,
+          CASE
+            WHEN CW.[Fecha_Promesa_Actual] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Actual], 120)
+            WHEN R.[Fecha_Promesa] IS NOT NULL THEN CONVERT(VARCHAR(10), R.[Fecha_Promesa], 120)
+            ELSE ''
+          END AS fechaPromesa,
+          ISNULL(CW.[Autor_Actual], CASE WHEN R.[Compromiso] IS NOT NULL AND R.[Compromiso] <> '' THEN 'Sincronizado GSheets' ELSE '' END) AS autorActual,
+          ISNULL(CW.[Rol_Actual], '') AS rolActual,
+          CASE WHEN CW.[Fecha_Actualizacion] IS NOT NULL THEN FORMAT(CW.[Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaActualizacionCompromiso,
+          ISNULL(CW.[Compromiso_Anterior], '') AS compromisoAnterior,
+          CASE WHEN CW.[Fecha_Promesa_Anterior] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Anterior], 103) ELSE '' END AS fechaPromesaAnterior,
+          ISNULL(CW.[Autor_Anterior], '') AS autorAnterior,
+          ISNULL(CW.[Rol_Anterior], '') AS rolAnterior,
+          CASE WHEN CW.[Fecha_Anterior] IS NOT NULL THEN FORMAT(CW.[Fecha_Anterior], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaAnteriorCompromiso
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] CW WITH (NOLOCK)
+          ON RTRIM(LTRIM(R.[Pagare])) = RTRIM(LTRIM(CW.[Pagare]))
+        OUTER APPLY (
+          SELECT TOP 1 ISNULL(DA.[AsesorNombresApellidos], DA.[Asesor]) AS NombreAsesor
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] DA WITH (NOLOCK)
+          WHERE RTRIM(LTRIM(DA.[IdSAsesor])) = RTRIM(LTRIM(R.[IdSAsesor]))
+          ORDER BY DA.[Periodo] DESC
+        ) D_AS
+        WHERE R.[Fecha_Foto] = @UltimaFecha
+          AND R.[Estado_Mora] = '3. Mora Potencial'
+          AND (@idAgencia = '' OR RTRIM(LTRIM(R.[IdSAgencia])) = @idAgencia)
+          AND (
+            @asesor = ''
+            OR RTRIM(LTRIM(R.[IdSAsesor])) = @asesor
+            OR RTRIM(LTRIM(D_AS.NombreAsesor)) LIKE '%' + @asesor + '%'
+          )
+        ORDER BY R.[Saldo_Capital] DESC;
+      `);
+    const metaAsesorHoyRes = await pool.request().input("asesor", sql11.VarChar(150), asesorReq.trim()).query(`
+        SELECT TOP 1
+          [Meta_Op_Dia] AS metaOpDia,
+          [Meta_Monto_Dia] AS metaMontoDia,
+          FORMAT([Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') AS fechaActualizacion
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
+        WHERE [Fecha] = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
+          AND ([IdSAsesor] = @asesor OR [AsesorNombre] LIKE '%' + @asesor + '%')
+      `);
+    const logRes = await pool.request().query(`
+      SELECT TOP (1)
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 hh:mm:ss tt', 'es-PE') AS UltimaActualizacion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
+      ORDER BY [UltimaActualizacion] DESC
+    `);
+    const ultimaActualizacionDwh = logRes.recordset?.[0]?.UltimaActualizacion || "";
+    res.json({
+      periodosDisponibles,
+      periodoActivo: periodo,
+      ultimaActualizacionDwh,
+      versionSignature: getCombinedVersionSignature(),
+      kpis: kpiResult.recordset?.[0] || {},
+      productividadDiaria: prodVivoRes.recordset || [],
+      metasMensuales: metasMensualesRes.recordset || [],
+      historialMetasMensuales: historialMetasRes.recordset || [],
+      administradores: adminsRes.recordset || [],
+      moraPotencial: moraRes.recordset || [],
+      metaAsesorHoy: metaAsesorHoyRes.recordset?.[0] || { metaOpDia: 0, metaMontoDia: 0, fechaActualizacion: "" }
+    });
+  } catch (error2) {
+    console.error("Error en /api/welcome/init:", error2);
+    res.status(500).json({ error: "Error cargando el centro de mando Welcome" });
+  }
+});
+router16.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const { filas, usuarioNombre, usuarioRol } = req.body;
+    if (!Array.isArray(filas) || filas.length === 0) {
+      return res.status(400).json({ error: "No se enviaron filas para guardar" });
+    }
+    const transaction = new sql11.Transaction(pool);
+    await transaction.begin();
+    try {
+      for (const f of filas) {
+        const idAge = String(f.idAgencia || NAME_TO_CODE[String(f.agencia || "").toUpperCase()] || "01").padStart(2, "0");
+        const opFaltantes = Number(f.opFaltantesDia || 0);
+        const crecFaltante = Number(f.crecFaltanteDia || 0);
+        const sugOp = f.sugerenciaOpGerencia !== void 0 ? Number(f.sugerenciaOpGerencia) : null;
+        const sugMonto = f.sugerenciaMontoGerencia !== void 0 ? Number(f.sugerenciaMontoGerencia) : null;
+        const proyOpAdmin = f.proyeccionColocacion !== void 0 ? Number(f.proyeccionColocacion) : null;
+        const proyMontoAdmin = f.proyeccionMonto !== void 0 ? Number(f.proyeccionMonto) : null;
+        await new sql11.Request(transaction).input("idAge", sql11.VarChar(2), idAge).input("opFaltantes", sql11.Int, opFaltantes).input("crecFaltante", sql11.Float, crecFaltante).input("sugOp", sql11.Int, sugOp).input("sugMonto", sql11.Float, sugMonto).input("proyOpAdmin", sql11.Int, proyOpAdmin).input("proyMontoAdmin", sql11.Float, proyMontoAdmin).input("autor", sql11.VarChar(150), String(usuarioNombre || "Usuario")).input("rol", sql11.VarChar(50), String(usuarioRol || "GERENCIA")).query(`
+            DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+
+            IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge)
+            BEGIN
+              UPDATE [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]
+              SET
+                [Op_Faltantes_Dia] = CASE WHEN @rol IN ('SUPER_ADMIN', 'GERENTE_GENERAL', 'JEFE_OPERACIONES') THEN @opFaltantes ELSE [Op_Faltantes_Dia] END,
+                [Crec_Faltante_Dia] = CASE WHEN @rol IN ('SUPER_ADMIN', 'GERENTE_GENERAL', 'JEFE_OPERACIONES') THEN @crecFaltante ELSE [Crec_Faltante_Dia] END,
+                [Sugerencia_Op_Gerencia] = COALESCE(@sugOp, [Sugerencia_Op_Gerencia]),
+                [Sugerencia_Monto_Gerencia] = COALESCE(@sugMonto, [Sugerencia_Monto_Gerencia]),
+                [Proy_Op_Admin] = COALESCE(@proyOpAdmin, [Proy_Op_Admin]),
+                [Proy_Monto_Admin] = COALESCE(@proyMontoAdmin, [Proy_Monto_Admin]),
+                [Actualizado_Por] = @autor,
+                [Rol_Editor] = @rol,
+                [Fecha_Actualizacion] = GETDATE()
+              WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge;
+            END
+            ELSE
+            BEGIN
+              INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]
+                ([Fecha], [IdSAgencia], [Op_Faltantes_Dia], [Crec_Faltante_Dia], [Sugerencia_Op_Gerencia], [Sugerencia_Monto_Gerencia], [Proy_Op_Admin], [Proy_Monto_Admin], [Actualizado_Por], [Rol_Editor], [Fecha_Actualizacion])
+              VALUES
+                (@Hoy, @idAge, @opFaltantes, @crecFaltante, @sugOp, @sugMonto, COALESCE(@proyOpAdmin, @sugOp, 0), COALESCE(@proyMontoAdmin, @sugMonto, 0), @autor, @rol, GETDATE());
+            END
+
+            DELETE FROM [dm_productividad].[dbo].[FctDiario_MetaProy]
+            WHERE [Fecha] = @Hoy AND RIGHT('00' + CAST([IdSAgencia] AS VARCHAR(2)), 2) = @idAge;
+
+            INSERT INTO [dm_productividad].[dbo].[FctDiario_MetaProy]
+              ([Fecha], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumProy], [ColocacionMontoMeta], [ColocacionMontoProy])
+            SELECT
+              @Hoy,
+              CAST(@idAge AS BIGINT),
+              [Op_Faltantes_Dia],
+              ISNULL([Proy_Op_Admin], ISNULL([Sugerencia_Op_Gerencia], 0)),
+              [Crec_Faltante_Dia],
+              ISNULL([Proy_Monto_Admin], ISNULL([Sugerencia_Monto_Gerencia], 0))
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]
+            WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge;
+            IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+            UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+          `);
+      }
+      await transaction.commit();
+      res.json({ ok: true, message: "Metas diarias guardadas correctamente" });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error2) {
+    console.error("Error guardando metas diarias:", error2);
+    res.status(500).json({ error: "Error al guardar las metas diarias" });
+  }
+});
+router16.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const { idAsesor, asesorNombre, idAgencia, metaOpDia, metaMontoDia } = req.body;
+    const idAge = String(idAgencia || "01").trim().padStart(2, "0");
+    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim();
+    await pool.request().input("idAsesor", sql11.VarChar(30), codigoAsesor).input("idAge", sql11.VarChar(2), idAge).input("nombre", sql11.VarChar(150), String(asesorNombre || codigoAsesor)).input("op", sql11.Int, Number(metaOpDia || 0)).input("monto", sql11.Float, Number(metaMontoDia || 0)).query(`
+        DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WHERE [Fecha] = @Hoy AND [IdSAsesor] = @idAsesor)
+        BEGIN
+          UPDATE [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor]
+          SET [Meta_Op_Dia] = @op, [Meta_Monto_Dia] = @monto, [AsesorNombre] = @nombre, [Fecha_Actualizacion] = GETDATE()
+          WHERE [Fecha] = @Hoy AND [IdSAsesor] = @idAsesor;
+        END
+        ELSE
+        BEGIN
+          INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor]
+            ([Fecha], [IdSAsesor], [IdSAgencia], [AsesorNombre], [Meta_Op_Dia], [Meta_Monto_Dia], [Fecha_Actualizacion])
+          VALUES (@Hoy, @idAsesor, @idAge, @nombre, @op, @monto, GETDATE());
+        END
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+        UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+      `);
+    res.json({ ok: true, message: "Meta registrada con \xE9xito." });
+  } catch (error2) {
+    console.error("Error guardando meta diaria de asesor:", error2);
+    res.status(500).json({ error: "Error guardando meta diaria del analista" });
+  }
+});
+router16.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const { periodo, filas, usuarioNombre, usuarioEmail, usuarioRol } = req.body;
+    if (!periodo || !Array.isArray(filas)) {
+      return res.status(400).json({ error: "Periodo y filas son obligatorios" });
+    }
+    const transaction = new sql11.Transaction(pool);
+    await transaction.begin();
+    try {
+      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
+      let totalOpAjus = 0;
+      let totalMontoAjus = 0;
+      for (const row of filas) {
+        const opAjus = Number(row.colocacionNumMetaAjus || 0);
+        const montoAjus = Number(row.colocacionMontoMetaAjus || 0);
+        totalOpAjus += opAjus;
+        totalMontoAjus += montoAjus;
+        await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("idAge", sql11.Int, parseInt(String(row.idAgencia || "1"), 10)).input("opMeta", sql11.Int, Number(row.colocacionNumMeta || 0)).input("opAjus", sql11.Int, opAjus).input("montoMeta", sql11.Float, Number(row.colocacionMontoMeta || 0)).input("montoAjus", sql11.Float, montoAjus).input("asesores", sql11.Int, Number(row.numeroAsesores || 0)).input("asesoresAjus", sql11.Int, Number(row.numeroAsesoresAjus || 0)).input("crecAjus", sql11.Int, Number(row.crecimientoMetaAjus || row.crecimientoMeta || 0)).query(`
+            INSERT INTO [dm_productividad].[dbo].[FctMensual]
+              ([Periodo], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumMetaAjus], [ColocacionMontoMeta], [ColocacionMontoMetaAjus], [NumeroAsesores], [NumeroAsesoresAjus], [CrecimientoMetaAjus])
+            VALUES
+              (@periodo, @idAge, @opMeta, @opAjus, @montoMeta, @montoAjus, @asesores, @asesoresAjus, @crecAjus)
+          `);
+      }
+      const resumen = `Actualiz\xF3 metas del periodo ${periodo} (${filas.length} agencias \xB7 Total Meta Op Ajustada: ${totalOpAjus} \xB7 Total Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
+      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("nombre", sql11.VarChar(150), String(usuarioNombre || "Super Admin")).input("email", sql11.VarChar(150), String(usuarioEmail || "")).input("rol", sql11.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).input("resumen", sql11.NVarChar(sql11.MAX), resumen).query(`
+          INSERT INTO [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]
+            ([Periodo], [Usuario_Nombre], [Usuario_Email], [Usuario_Rol], [Resumen_Cambio], [Fecha_Hora])
+          VALUES (@periodo, @nombre, @email, @rol, @resumen, GETDATE());
+
+          IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+            UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+        `);
+      await transaction.commit();
+      res.json({ ok: true, message: "Metas mensuales guardadas y registradas en historial." });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error2) {
+    console.error("Error guardando metas mensuales:", error2);
+    res.status(500).json({ error: "Error guardando metas mensuales" });
+  }
+});
+router16.post(["/welcome/administradores", "/api/welcome/administradores"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const { periodo, filas } = req.body;
+    if (!periodo || !Array.isArray(filas)) {
+      return res.status(400).json({ error: "Periodo y filas son requeridos" });
+    }
+    const transaction = new sql11.Transaction(pool);
+    await transaction.begin();
+    try {
+      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
+      for (const r of filas) {
+        const idAge = String(r.idAgencia || "01").trim().padStart(2, "0");
+        await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("idAge", sql11.Char(2), idAge).input("nombre", sql11.NVarChar(100), String(r.nombre || "").trim()).input("celular", sql11.VarChar(30), String(r.celular || "").trim()).input("correoPers", sql11.VarChar(120), String(r.correoPersonal || "").trim()).input("correoCorp", sql11.VarChar(120), String(r.correoCorporativo || "").trim()).query(`
+            INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
+              ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
+            VALUES (@periodo, @idAge, @nombre, @celular, @correoPers, @correoCorp)
+            IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+            UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+          `);
+      }
+      await transaction.commit();
+      res.json({ ok: true, message: "Directorio de Administradores actualizado." });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (error2) {
+    console.error("Error guardando administradores:", error2);
+    res.status(500).json({ error: "Error al guardar administradores" });
+  }
+});
+router16.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], async (req, res) => {
+  try {
+    await ensureWelcomeTables();
+    const { pagare, compromiso, fechaPromesa, usuarioNombre, usuarioRol } = req.body;
+    if (!pagare) {
+      return res.status(400).json({ error: "El pagar\xE9 es obligatorio" });
+    }
+    const pagareClean = String(pagare).trim();
+    const compText = String(compromiso || "").trim();
+    const fechaProm = fechaPromesa && String(fechaPromesa).trim() !== "" ? String(fechaPromesa).trim() : null;
+    const autor = String(usuarioNombre || "Usuario").trim();
+    const rol = String(usuarioRol || "ANALISTA").trim();
+    await pool.request().input("pagare", sql11.VarChar(40), pagareClean).input("compromiso", sql11.NVarChar(500), compText).input("fechaPromesa", sql11.Date, fechaProm).input("autor", sql11.VarChar(150), autor).input("rol", sql11.VarChar(60), rol).query(`
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] WHERE [Pagare] = @pagare)
+        BEGIN
+          UPDATE [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web]
+          SET
+            [Compromiso_Anterior] = [Compromiso_Actual],
+            [Fecha_Promesa_Anterior] = [Fecha_Promesa_Actual],
+            [Autor_Anterior] = [Autor_Actual],
+            [Rol_Anterior] = [Rol_Actual],
+            [Fecha_Anterior] = [Fecha_Actualizacion],
+            [Compromiso_Actual] = @compromiso,
+            [Fecha_Promesa_Actual] = @fechaPromesa,
+            [Autor_Actual] = @autor,
+            [Rol_Actual] = @rol,
+            [Fecha_Actualizacion] = GETDATE()
+          WHERE [Pagare] = @pagare;
+        END
+        ELSE
+        BEGIN
+          DECLARE @CompPrevio NVARCHAR(500) = (
+            SELECT TOP 1 [Compromiso]
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+            WHERE RTRIM(LTRIM([Pagare])) = @pagare AND [Compromiso] IS NOT NULL AND LTRIM(RTRIM([Compromiso])) <> ''
+            ORDER BY [Fecha_Foto] DESC
+          );
+          DECLARE @FechaPrevia DATE = (
+            SELECT TOP 1 [Fecha_Promesa]
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+            WHERE RTRIM(LTRIM([Pagare])) = @pagare AND [Compromiso] IS NOT NULL AND LTRIM(RTRIM([Compromiso])) <> ''
+            ORDER BY [Fecha_Foto] DESC
+          );
+
+          INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web]
+            ([Pagare], [Compromiso_Actual], [Fecha_Promesa_Actual], [Autor_Actual], [Rol_Actual], [Fecha_Actualizacion],
+             [Compromiso_Anterior], [Fecha_Promesa_Anterior], [Autor_Anterior], [Rol_Anterior], [Fecha_Anterior])
+          VALUES
+            (@pagare, @compromiso, @fechaPromesa, @autor, @rol, GETDATE(),
+             @CompPrevio, @FechaPrevia, CASE WHEN @CompPrevio IS NOT NULL THEN 'Registro Previo' ELSE NULL END, CASE WHEN @CompPrevio IS NOT NULL THEN 'ANALISTA' ELSE NULL END, CASE WHEN @CompPrevio IS NOT NULL THEN GETDATE() ELSE NULL END);
+        END
+
+        INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_historial]
+          ([Pagare], [Compromiso], [Fecha_Promesa], [Autor_Nombre], [Autor_Rol], [Fecha_Registro])
+        VALUES (@pagare, @compromiso, @fechaPromesa, @autor, @rol, GETDATE());
+
+        UPDATE [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral]
+        SET
+          [Compromiso] = @compromiso,
+          [Fecha_Promesa] = @fechaPromesa
+        WHERE RTRIM(LTRIM([Pagare])) = @pagare
+          AND [Fecha_Foto] = (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral]);
+
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 4)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 4;
+      `);
+    res.json({ ok: true, message: "Compromiso guardado con \xE9xito." });
+  } catch (error2) {
+    console.error("Error guardando compromiso de mora:", error2);
+    res.status(500).json({ error: "Error al guardar el compromiso de pago" });
+  }
+});
+var welcome_default = router16;
+
+// src/routes/productividadViva.ts
+var import_express17 = __toESM(require_express2(), 1);
+import sql12 from "mssql";
+var router17 = (0, import_express17.Router)();
+router17.get(["/productividad-en-vivo", "/api/productividad-en-vivo"], async (req, res) => {
+  const periodo = (req.query.periodo || "").trim();
+  try {
+    const result = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
+        DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+        DECLARE @PeriodoDefault VARCHAR(6) = CASE WHEN @periodo <> '' THEN @periodo ELSE CONVERT(VARCHAR(6), @Hoy, 112) END;
+
+        WITH Agencias AS (
+          SELECT * FROM (VALUES
+            ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
+            ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+            ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+            ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+            ('13', 'Pucallpa')
+          ) AS t(IdSAgencia, NombreAgencia)
+        ),
+        MetasHoy AS (
+          SELECT
+            RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) AS IdSAgencia,
+            ISNULL(ColocacionNumProy, 0) AS proyOpDia,
+            ISNULL(ColocacionMontoProy, 0) AS proyMontoDia
+          FROM [dm_productividad].[dbo].[FctDiario_MetaProy] WITH (NOLOCK)
+          WHERE Fecha = @Hoy
+        ),
+        ControlHoy AS (
+          SELECT
+            IdSAgencia,
+            Proy_Op_Admin,
+            Proy_Monto_Admin,
+            Sugerencia_Op_Gerencia,
+            Sugerencia_Monto_Gerencia
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+          WHERE Fecha = @Hoy
+        ),
+        VivoHoy AS (
+          SELECT
+            RTRIM(LTRIM(IdSAgencia)) AS IdSAgencia,
+            CONVERT(VARCHAR(10), [Fecha], 120) AS Fecha,
+            [Periodo],
+            SUM([ColocacionNumReal]) AS colocacionNumReal,
+            SUM([ColocacionMontoReal]) AS colocacionMontoReal
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_productividad_en_vivo_log] WITH (NOLOCK)
+          WHERE [Fecha] = @Hoy
+          GROUP BY RTRIM(LTRIM(IdSAgencia)), [Fecha], [Periodo]
+        )
+        SELECT
+          ISNULL(V.Fecha, CONVERT(VARCHAR(10), @Hoy, 120)) AS fecha,
+          ISNULL(V.Periodo, @PeriodoDefault) AS periodo,
+          A.IdSAgencia AS idAgencia,
+          A.NombreAgencia AS agencia,
+          COALESCE(C.Proy_Op_Admin, M.proyOpDia, C.Sugerencia_Op_Gerencia, 0) AS proyeccionColocacion,
+          COALESCE(C.Proy_Monto_Admin, M.proyMontoDia, C.Sugerencia_Monto_Gerencia, 0) AS proyeccionMonto,
+          ISNULL(V.colocacionNumReal, 0) AS colocacionNumReal,
+          ISNULL(V.colocacionMontoReal, 0) AS colocacionMontoReal
+        FROM Agencias A
+        LEFT JOIN MetasHoy M ON A.IdSAgencia = M.IdSAgencia
+        LEFT JOIN ControlHoy C ON A.IdSAgencia = C.IdSAgencia
+        LEFT JOIN VivoHoy V ON A.IdSAgencia = V.IdSAgencia
+        ORDER BY A.IdSAgencia ASC;
+      `);
+    const logRes = await pool.request().query(`
+      SELECT TOP (1) 
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 HH:mm:ss', 'es-PE') AS UltimaActualizacion,
+        ISNULL([Descripcion], 'Productividad en Vivo (Transacmif)') AS Descripcion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
+      WHERE [Id] = 5
+    `);
+    const rowLog = logRes.recordset?.[0];
+    const ultimaAct = rowLog?.UltimaActualizacion || "Sincronizando...";
+    const desc = rowLog?.Descripcion || "Productividad en Vivo (Transacmif)";
+    res.json({
+      rows: result.recordset || [],
+      ultimaActualizacionTexto: `${desc}: ${ultimaAct}`
+    });
+  } catch (error2) {
+    console.error("Error consultando productividad en vivo:", error2);
+    res.status(500).json({ error: "Error al obtener productividad en vivo" });
+  }
+});
+var productividadViva_default = router17;
+
+// src/routes/index.ts
+var router18 = (0, import_express18.Router)();
+router18.use(health_default);
+router18.use(preventiva_default);
+router18.use(filtros_default);
+router18.use(calendario_default);
+router18.use(gerencia_default);
+router18.use(supervision_default);
+router18.use(agencia_default);
+router18.use(asesores_default);
+router18.use(diaria_default);
+router18.use(evolucion_default);
+router18.use(cancelados_default);
+router18.use(avance_default);
+router18.use(ranking_default);
+router18.use(mora_default);
+router18.use(pagosMora_default);
+router18.use(welcome_default);
+router18.use(productividadViva_default);
+var routes_default = router18;
 
 // src/app.ts
-var app = (0, import_express17.default)();
+var app = (0, import_express19.default)();
 app.set("etag", false);
 app.use((0, import_cors.default)());
-app.use(import_express17.default.json());
+app.use(import_express19.default.json());
 app.use(smartCacheMiddleware);
 startCacheWatcher();
 app.get("/health", (req, res) => {
@@ -35993,9 +37034,6 @@ on-finished/index.js:
    * MIT Licensed
    *)
 
-content-type/dist/index.js:
-content-type/dist/index.js:
-content-type/index.js:
 content-type/dist/index.js:
   (*!
    * content-type
@@ -36177,7 +37215,7 @@ range-parser/index.js:
    * MIT Licensed
    *)
 
-content-disposition/index.js:
+content-disposition/dist/index.js:
   (*!
    * content-disposition
    * Copyright(c) 2014-2017 Douglas Christopher Wilson

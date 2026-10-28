@@ -1,57 +1,63 @@
-// En D:\Proyectos\power-bi-web_backend\src\routes\filtros.ts
+// D:\Proyectos\power-bi-web_backend\src\routes\filtros.ts
 import { Router, Request, Response } from "express";
 import { pool } from "../lib/db";
-import { getCombinedVersionSignature } from "../middlewares/smartCache";
+import { getCombinedVersionSignature, getLogsStatusByBucket } from "../middlewares/smartCache";
 
 const router = Router();
 
+let cachedCatalogs: {
+  versionEtl: string;
+  periodos: string[];
+  asesores: any[];
+  fechas: any[];
+} | null = null;
+
 router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) => {
   try {
-    const periodos = await pool.request().query(`
-      SELECT DISTINCT [Periodo] 
-      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-      WHERE [Periodo] IS NOT NULL
-      ORDER BY [Periodo] DESC
-    `);
+    const logs = getLogsStatusByBucket();
+    const currentEtlVer = logs.etl.version;
 
-    const asesores = await pool.request().query(`
-      SELECT DISTINCT 
-          [Periodo], 
-          [IdSAgencia], 
-          [IdSAsesor], 
-          [Asesor], 
-          [AsesorNombresApellidos] 
-      FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-      WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
-    `);
+    // Solo consulta los catálogos de periodos/asesores/fechas en SQL cuando cambia el ETL (Id = 1)
+    if (!cachedCatalogs || cachedCatalogs.versionEtl !== currentEtlVer) {
+      const [periodos, asesores, fechas] = await Promise.all([
+        pool.request().query(`
+          SELECT DISTINCT RTRIM(LTRIM([Periodo])) AS Periodo
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE [Periodo] IS NOT NULL AND LTRIM(RTRIM([Periodo])) <> ''
+          ORDER BY RTRIM(LTRIM([Periodo])) DESC
+        `),
+        pool.request().query(`
+          SELECT DISTINCT 
+              [Periodo], [IdSAgencia], [IdSAsesor], [Asesor], [AsesorNombresApellidos] 
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
+        `),
+        pool.request().query(`
+          SELECT 
+              [Periodo], 
+              CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
+              CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
+          ORDER BY [Fecha] DESC
+        `),
+      ]);
 
-    const fechas = await pool.request().query(`
-      SELECT 
-          [Periodo], 
-          CAST([Fecha] AS VARCHAR(10)) AS FechaValor, 
-          CONVERT(VARCHAR(10), [Fecha], 103) AS FechaVista 
-      FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-      WHERE [Fecha] <= CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
-      ORDER BY [Fecha] DESC
-    `);
-
-    const logResult = await pool.request().query(`
-      SELECT TOP (1) 
-        FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm tt', 'es-PE') AS UltimaActualizacion
-      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      ORDER BY [UltimaActualizacion] DESC
-    `);
-
-    const ultimaActualizacion = logResult.recordset.length > 0 
-      ? logResult.recordset[0].UltimaActualizacion 
-      : 'Desconocido';
+      cachedCatalogs = {
+        versionEtl: currentEtlVer,
+        periodos: periodos.recordset.map((p: any) => p.Periodo),
+        asesores: asesores.recordset,
+        fechas: fechas.recordset,
+      };
+    }
 
     res.json({
-      periodos: periodos.recordset.map((p: any) => p.Periodo),
-      asesores: asesores.recordset,
-      fechas: fechas.recordset,
-      ultimaActualizacion: ultimaActualizacion,
-      versionSignature: getCombinedVersionSignature(), // 👈 Firma unificada de los 4 cachés
+      periodos: cachedCatalogs.periodos,
+      asesores: cachedCatalogs.asesores,
+      fechas: cachedCatalogs.fechas,
+      ultimaActualizacion: logs.etl.etiqueta,
+      logsPorModulo: logs, // 👈 Contiene las 5 horas y descripciones independientes (etl, gerencial, ranking, mora, vivo)
+      versionSignature: getCombinedVersionSignature(),
     });
   } catch (error) {
     console.error("Error obteniendo filtros:", error);

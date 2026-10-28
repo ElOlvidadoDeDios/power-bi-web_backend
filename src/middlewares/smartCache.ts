@@ -2,28 +2,75 @@
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../lib/db";
 
-type BucketName = "etl" | "gerencial" | "ranking" | "mora";
+export type BucketName = "etl" | "gerencial" | "ranking" | "mora" | "vivo";
 
 interface CacheBucket {
+  idLog: number;
   name: BucketName;
   version: string;
+  lastFormattedDate: string;
+  description: string;
   store: Map<string, any>;
   knownRoutes: Set<string>;
 }
 
 const buckets: Record<BucketName, CacheBucket> = {
-  etl: { name: "etl", version: "", store: new Map(), knownRoutes: new Set(["/api/filtros"]) },
-  gerencial: { name: "gerencial", version: "", store: new Map(), knownRoutes: new Set() },
-  ranking: { name: "ranking", version: "", store: new Map(), knownRoutes: new Set(["/api/ranking"]) },
-  mora: { name: "mora", version: "", store: new Map(), knownRoutes: new Set(["/api/mora", "/api/pagos-mora"]) },
+  etl: {
+    idLog: 1,
+    name: "etl",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "ETL Principal DWH (Cartera, Flujo, Stock y Metas)",
+    store: new Map(),
+    knownRoutes: new Set(),
+  },
+  gerencial: {
+    idLog: 2,
+    name: "gerencial",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Actualizador Gerencial (Cancelados y Avance)",
+    store: new Map(),
+    knownRoutes: new Set(),
+  },
+  ranking: {
+    idLog: 3,
+    name: "ranking",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Ranking Comercial de Asesores",
+    store: new Map(),
+    knownRoutes: new Set(["/api/ranking"]),
+  },
+  mora: {
+    idLog: 4,
+    name: "mora",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Motor de Mora, Compromisos e IA Preventiva",
+    store: new Map(),
+    knownRoutes: new Set(["/api/mora", "/api/pagos-mora"]),
+  },
+  vivo: {
+    idLog: 5,
+    name: "vivo",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Productividad en Vivo (Transacmif)",
+    store: new Map(),
+    knownRoutes: new Set(["/api/productividad-en-vivo"]),
+  },
 };
 
 let lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3000}`;
 let isChecking = false;
 
-// Clasifica cada petición entrante en su caché correspondiente
-function resolveBucket(path: string): CacheBucket {
+// Clasifica cada petición entrante en su propio caché independiente
+export function resolveBucket(path: string): CacheBucket {
   const p = path.toLowerCase();
+  if (p.includes("productividad-en-vivo")) {
+    return buckets.vivo;
+  }
   if (p.includes("cancelados") || p.includes("avance")) {
     return buckets.gerencial;
   }
@@ -36,55 +83,49 @@ function resolveBucket(path: string): CacheBucket {
   return buckets.etl;
 }
 
-// Consulta las 4 huellas de versión en 1 sola lectura ultrarrápida a SQL Server
-async function getAllVersions(): Promise<Record<BucketName, string> | null> {
+// Lee los 5 registros de Log_Actualizacion en 1 sola consulta ligera
+async function syncVersionsFromDatabase(): Promise<boolean> {
   try {
     const result = await pool.request().query(`
-      SELECT 
-        -- 1. Versión del ETL Principal (Id = 1)
-        CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 1), 126) AS vEtl,
-        
-        -- 2. Versión de Actualizador Gerencial (Id = 2 o firma de respaldo sobre las tablas)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 2), 126),
-          CONCAT(
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] WITH (NOLOCK)), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[creditos_cancelados_no_renovados] WITH (NOLOCK))
-          )
-        ) AS vGerencial,
-
-        -- 3. Versión de Ranking (Id = 3 o fecha + suma de puntajes)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 3), 126),
-          CONCAT(
-            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Calculo]) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)), 126), '_',
-            CAST((SELECT ISNULL(SUM([Puntaje_Total]), 0) FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)) AS VARCHAR(30))
-          )
-        ) AS vRanking,
-
-        -- 4. Versión de Mora e IA (Id = 4 o fecha foto + conteo + compromisos)
-        COALESCE(
-          CONVERT(VARCHAR(30), (SELECT TOP 1 [UltimaActualizacion] FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK) WHERE [Id] = 4), 126),
-          CONCAT(
-            CONVERT(VARCHAR(20), (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)), 126), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK) WHERE [Compromiso] IS NOT NULL), '_',
-            (SELECT COUNT(*) FROM [DWH_Gestion_Cartera].[dbo].[fct_pagos_mora_diarios] WITH (NOLOCK))
-          )
-        ) AS vMora
+      SELECT
+        [Id],
+        CONVERT(VARCHAR(30), [UltimaActualizacion], 126) AS VersionIso,
+        FORMAT([UltimaActualizacion], 'dd/MM/yyyy · HH:mm:ss', 'es-PE') AS FechaFormateada,
+        ISNULL([Descripcion], '') AS Descripcion
+      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
+      WHERE [Id] IN (1, 2, 3, 4, 5)
     `);
 
-    const row = result.recordset?.[0];
-    if (!row) return null;
+    const rows = result.recordset || [];
+    const mapById = new Map<number, any>();
+    rows.forEach((r: any) => mapById.set(Number(r.Id), r));
 
-    return {
-      etl: String(row.vEtl || "v1"),
-      gerencial: String(row.vGerencial || "v1"),
-      ranking: String(row.vRanking || "v1"),
-      mora: String(row.vMora || "v1"),
-    };
+    let anyChanged = false;
+
+    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo"] as BucketName[]) {
+      const bucket = buckets[key];
+      const row = mapById.get(bucket.idLog);
+      if (!row) continue;
+
+      const latestVer = String(row.VersionIso || "v1");
+      bucket.lastFormattedDate = String(row.FechaFormateada || "");
+      if (row.Descripcion) {
+        bucket.description = String(row.Descripcion);
+      }
+
+      if (bucket.version !== latestVer) {
+        console.log(
+          `🔄 [SmartCache:${key.toUpperCase()} | Id=${bucket.idLog}] Cambio detectado (${bucket.lastFormattedDate}). Refrescando solo sus tablas...`
+        );
+        await refreshBucketRoutes(bucket, latestVer);
+        anyChanged = true;
+      }
+    }
+
+    return anyChanged;
   } catch (err) {
     console.error("⚠️ [SmartCache] Error leyendo versiones SQL:", err);
-    return null;
+    return false;
   }
 }
 
@@ -95,9 +136,7 @@ async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
 
   if (routesToWarm.length === 0) return;
 
-  console.log(`🔥 [SmartCache:${bucket.name.toUpperCase()}] Refrescando ${routesToWarm.length} rutas en RAM...`);
   const start = Date.now();
-
   for (let i = 0; i < routesToWarm.length; i += 4) {
     const batch = routesToWarm.slice(i, i + 4);
     await Promise.allSettled(
@@ -108,8 +147,9 @@ async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
       )
     );
   }
-
-  console.log(`✅ [SmartCache:${bucket.name.toUpperCase()}] Listo en ${((Date.now() - start) / 1000).toFixed(2)}s.`);
+  console.log(
+    `✅ [SmartCache:${bucket.name.toUpperCase()}] ${routesToWarm.length} rutas actualizadas en RAM en ${((Date.now() - start) / 1000).toFixed(2)}s.`
+  );
 }
 
 export function startCacheWatcher() {
@@ -117,29 +157,60 @@ export function startCacheWatcher() {
     if (isChecking) return;
     isChecking = true;
     try {
-      const versions = await getAllVersions();
-      if (!versions) return;
-
-      for (const key of ["etl", "gerencial", "ranking", "mora"] as BucketName[]) {
-        const bucket = buckets[key];
-        const latestVer = versions[key];
-
-        if (bucket.version !== latestVer) {
-          console.log(`🔄 [SmartCache:${key.toUpperCase()}] Cambio detectado (${latestVer}). Actualizando su caché independiente...`);
-          await refreshBucketRoutes(bucket, latestVer);
-        }
-      }
+      await syncVersionsFromDatabase();
     } finally {
       isChecking = false;
     }
   };
 
-  setTimeout(checkLoop, 1500);
-  setInterval(checkLoop, 20000);
+  setTimeout(checkLoop, 1000);
+  setInterval(checkLoop, 10000); // Revisa Log_Actualizacion cada 10s (consulta de 5 filas en <1ms)
 }
 
+// Firma de 5 partes: etl|gerencial|ranking|mora|vivo
 export function getCombinedVersionSignature(): string {
-  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}`;
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}`;
+}
+
+// Devuelve el estado detallado de los 5 logs para el frontend sin golpear la BD
+export function getLogsStatusByBucket() {
+  return {
+    etl: {
+      id: 1,
+      descripcion: buckets.etl.description,
+      fechaHora: buckets.etl.lastFormattedDate,
+      etiqueta: `ETL Principal DWH: ${buckets.etl.lastFormattedDate}`,
+      version: buckets.etl.version,
+    },
+    gerencial: {
+      id: 2,
+      descripcion: buckets.gerencial.description,
+      fechaHora: buckets.gerencial.lastFormattedDate,
+      etiqueta: `Cancelados y Avance: ${buckets.gerencial.lastFormattedDate}`,
+      version: buckets.gerencial.version,
+    },
+    ranking: {
+      id: 3,
+      descripcion: buckets.ranking.description,
+      fechaHora: buckets.ranking.lastFormattedDate,
+      etiqueta: `Ranking Comercial: ${buckets.ranking.lastFormattedDate}`,
+      version: buckets.ranking.version,
+    },
+    mora: {
+      id: 4,
+      descripcion: buckets.mora.description,
+      fechaHora: buckets.mora.lastFormattedDate,
+      etiqueta: `Gestión de Mora e IA: ${buckets.mora.lastFormattedDate}`,
+      version: buckets.mora.version,
+    },
+    vivo: {
+      id: 5,
+      descripcion: buckets.vivo.description,
+      fechaHora: buckets.vivo.lastFormattedDate,
+      etiqueta: `Productividad en Vivo (Transacmif): ${buckets.vivo.lastFormattedDate}`,
+      version: buckets.vivo.version,
+    },
+  };
 }
 
 export async function smartCacheMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -152,9 +223,19 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
     lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3000}`;
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   if (req.path.endsWith("/cache-clear")) {
     Object.values(buckets).forEach((b) => b.store.clear());
-    return res.json({ ok: true, message: "Los 4 cachés fueron limpiados manualmente" });
+    return res.json({ ok: true, message: "Los 5 cachés fueron limpiados manualmente" });
+  }
+
+  // ⚠️ IMPORTANTE: /api/filtros NUNCA debe quedarse congelado en un solo bucket,
+  // porque transporta las firmas en vivo de los 5 buckets hacia el navegador.
+  if (req.path.includes("/filtros")) {
+    return next();
   }
 
   const activeBucket = resolveBucket(req.path);
@@ -172,8 +253,11 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
   res.json = (body: any) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
-      // Guardamos hasta 15 rutas frecuentes por bucket (incluyendo página 1 de avance/cancelados)
-      if (activeBucket.knownRoutes.size < 15 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+      if (
+        activeBucket.knownRoutes.size < 20 &&
+        req.originalUrl &&
+        (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))
+      ) {
         activeBucket.knownRoutes.add(req.originalUrl);
       }
     }

@@ -29,7 +29,7 @@ router.get(["/cancelados", "/api/cancelados"], async (req: Request, res: Respons
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
           CONVERT(VARCHAR(10), C.[Fecha_Cancelacion], 103) AS FechaCancelacion,
           ISNULL(D_AS.Asesor, C.IdSAsesor) AS Asesor,
-          C.Cuenta,
+          RIGHT('000000000000' + LTRIM(RTRIM(CAST(C.Cuenta AS VARCHAR(20)))), 12) AS Cuenta,
           C.Socio,
           C.Pagare,
           C.Producto,

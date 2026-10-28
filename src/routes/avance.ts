@@ -29,7 +29,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
           ISNULL(D_AS.Asesor, A.IdSAsesor) AS Asesor,
           ISNULL(A.[Avance Cartera], 0) AS AvanceCartera,
-          A.Cuenta,
+          RIGHT('000000000000' + LTRIM(RTRIM(CAST(A.Cuenta AS VARCHAR(20)))), 12) AS Cuenta,
           A.Pagare,
           A.Socio,
           ISNULL(A.[Celular 1], '') AS Celular1,
