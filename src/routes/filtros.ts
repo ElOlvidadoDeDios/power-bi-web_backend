@@ -17,7 +17,6 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
     const logs = getLogsStatusByBucket();
     const currentEtlVer = logs.etl.version;
 
-    // Solo consulta los catálogos de periodos/asesores/fechas en SQL cuando cambia el ETL (Id = 1)
     if (!cachedCatalogs || cachedCatalogs.versionEtl !== currentEtlVer) {
       const [periodos, asesores, fechas] = await Promise.all([
         pool.request().query(`
@@ -28,9 +27,16 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
         `),
         pool.request().query(`
           SELECT DISTINCT 
-              [Periodo], [IdSAgencia], [IdSAsesor], [Asesor], [AsesorNombresApellidos] 
+              RTRIM(LTRIM([Periodo])) AS [Periodo], 
+              RIGHT('00' + RTRIM(LTRIM([IdSAgencia])), 2) AS [IdSAgencia], 
+              RTRIM(LTRIM([IdSAsesor])) AS [IdSAsesor], 
+              RTRIM(LTRIM([Asesor])) AS [Asesor], 
+              RTRIM(LTRIM([AsesorNombresApellidos])) AS [AsesorNombresApellidos],
+              RTRIM(LTRIM([Cargo])) AS [Cargo]
           FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
+          WHERE [Asesor] IS NOT NULL 
+            AND [AsesorNombresApellidos] IS NOT NULL
+            AND RTRIM(LTRIM([Cargo])) IN ('ANALISTA DE CREDITOS I', 'RECUPERADOR')
         `),
         pool.request().query(`
           SELECT 
@@ -56,7 +62,7 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       asesores: cachedCatalogs.asesores,
       fechas: cachedCatalogs.fechas,
       ultimaActualizacion: logs.etl.etiqueta,
-      logsPorModulo: logs, // 👈 Contiene las 5 horas y descripciones independientes (etl, gerencial, ranking, mora, vivo)
+      logsPorModulo: logs,
       versionSignature: getCombinedVersionSignature(),
     });
   } catch (error) {

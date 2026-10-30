@@ -40,21 +40,31 @@ router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, re
             ORDER BY Fecha DESC;
         END
 
-        -- 1. Resumen por Agencias
+        -- 1. Resumen por Agencias (Con IdSAgencia normalizado a 2 caracteres)
         ;WITH CTE_Agencias AS (
-            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo
+            SELECT DISTINCT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia 
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) 
+            WHERE Periodo = @periodo
         ),
         CTE_MetasProy AS (
-            SELECT IdSAgencia, ColocacionNumMeta, ColocacionNumProy, ColocacionMontoMeta, ColocacionMontoProy
-            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                SUM(ISNULL(ColocacionNumMeta, 0)) AS ColocacionNumMeta, 
+                SUM(ISNULL(ColocacionNumProy, 0)) AS ColocacionNumProy, 
+                SUM(ISNULL(ColocacionMontoMeta, 0)) AS ColocacionMontoMeta, 
+                SUM(ISNULL(ColocacionMontoProy, 0)) AS ColocacionMontoProy
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) 
+            WHERE Fecha = @TargetDate
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Logrado AS (
-            SELECT IdSAgencia, 
-                   ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
-                   ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
             FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @TargetDate
-            GROUP BY IdSAgencia
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         )
         SELECT 
             CASE A.IdSAgencia 

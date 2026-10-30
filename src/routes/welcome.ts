@@ -127,7 +127,7 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
     const periodosDisponibles = periodosRes.recordset.map((p: any) => p.Periodo);
 
     // Periodo activo: si el usuario seleccionó uno, usa ese; si no, el más reciente de la lista
-    const periodo = periodoReq || periodosDisponibles[0] || "202610";
+    const periodo = periodoReq || periodosDisponibles[0] || new Date().toISOString().slice(0,7).replace('-','');
     const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
 
     // 1.1. PERSISTENCIA AUTOMÁTICA DE ADMINISTRADORES AL CAMBIAR DE PERIODO

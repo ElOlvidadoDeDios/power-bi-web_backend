@@ -17,7 +17,7 @@ const dbConfig: sql.config = {
         max: 30, // 👈 Asegura suficientes conexiones para las 29 rutas del SmartCache
         min: 2,
         idleTimeoutMillis: 30000
-    }, // 👈 ¡Aquí faltaba esta coma!
+    },
     options: {
         encrypt: false, 
         trustServerCertificate: true

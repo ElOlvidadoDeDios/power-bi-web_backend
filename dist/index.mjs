@@ -34373,6 +34373,7 @@ var health_default = router;
 
 // src/routes/preventiva.ts
 var import_express2 = __toESM(require_express2(), 1);
+import sql2 from "mssql";
 
 // src/lib/db.ts
 var import_dotenv = __toESM(require_main(), 1);
@@ -34413,78 +34414,84 @@ var connectDB = async () => {
 
 // src/routes/preventiva.ts
 var router2 = (0, import_express2.Router)();
-router2.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (_req, res) => {
+router2.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (req, res) => {
+  const agenciaParam = (req.query.agencia || "").trim();
+  const analistaParam = (req.query.analista || req.query.asesor || "").trim();
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
+  const analista = analistaParam === "Todos" || analistaParam === "Todos los Analistas" ? "" : analistaParam;
   try {
-    const result = await pool.request().query(`
-      WITH ReporteGestionPreventiva AS (
-          SELECT 
-              CASE (
-                  CASE
-                      WHEN T_ANA.ID_AGE = '98' THEN
-                          CASE
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%10' THEN '10' 
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%11' THEN '11' 
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%12' THEN '12' 
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%13' THEN '13' 
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%6'  THEN '06' 
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%7'  THEN '07' 
-                              ELSE '98'
-                          END
-                      WHEN T_ANA.ID_AGE = '01' THEN
-                          CASE
-                              WHEN RTRIM(T_ANA.ID_USER) LIKE '%9' THEN '09'
-                              ELSE '01'
-                          END
-                      ELSE T_ANA.ID_AGE
-                  END
-              )
-                  WHEN '01' THEN 'Wanchaq'
-                  WHEN '02' THEN 'San Jer\xF3nimo'
-                  WHEN '03' THEN 'Quillabamba'
-                  WHEN '04' THEN 'Sicuani'
-                  WHEN '05' THEN 'Molino'
-                  WHEN '06' THEN 'Juliaca'
-                  WHEN '07' THEN 'Lima Los Olivos'
-                  WHEN '08' THEN 'Tica Tica'
-                  WHEN '09' THEN 'Magisterio'
-                  WHEN '10' THEN 'Lima SJL'
-                  WHEN '11' THEN 'Chiclayo'
-                  WHEN '12' THEN 'Arequipa'
-                  WHEN '13' THEN 'Pucallpa'
-                  ELSE 'Otra Agencia'
-              END AS [agencia],
-              ISNULL(S.RAZON_SOCIAL, LTRIM(RTRIM(S.APE_PATERNO)) + ' ' + LTRIM(RTRIM(S.APE_MATERNO)) + ', ' + LTRIM(RTRIM(S.NOMBRE))) AS [socio],
-              ISNULL(S.TLF_CEL1, ISNULL(S.TLF_CEL2, 'SIN TELEFONO')) AS [telefono],
-              TP.NOM_PROD AS [producto],
-              C.SALDO_PRES AS [saldo_numerico],
-              FORMAT(C.SALDO_PRES, 'N2', 'es-ES') AS [saldo_formateado],
-              T_PER.RAZON AS [analista],
-              CONVERT(VARCHAR(10), P.FECHA_VCMTO, 103) AS [fecha_vencimiento],
-              DATEDIFF(day, GETDATE(), P.FECHA_VCMTO) AS [dias_para_vencimiento]
-          FROM PREEC C WITH (NOLOCK)
-          INNER JOIN SOCIOS S WITH (NOLOCK) ON C.CUENTA = S.CUENTA
-          INNER JOIN PRESTAMO P WITH (NOLOCK) ON C.PAGARE = P.PAGARE
-          LEFT JOIN TIPOPROD TP WITH (NOLOCK) ON C.TIPO_PROD = TP.TIPO_PROD
-          INNER JOIN SEGURIDAD.DBO.ANAREC T_ANA WITH (NOLOCK) ON T_ANA.ID_ANAREC = C.ID_ANA AND T_ANA.FLAG_ANAREC = 'A'
-          INNER JOIN SEGURIDAD.dbo.USUARIOS T_USU WITH (NOLOCK) ON T_USU.ID_USER = T_ANA.ID_USER
-          INNER JOIN SEGURIDAD.dbo.GRUPOUSER T_GRU WITH (NOLOCK) ON T_GRU.ID_GRUPO = T_USU.ID_GRUPO AND T_GRU.NOM_GRUPO = 'CREDITOS'
-          INNER JOIN SEGURIDAD.dbo.PERSONAL T_PER WITH (NOLOCK) ON T_PER.DNI = T_USU.DNI
-          INNER JOIN SEGURIDAD.dbo.TCARGO_USER T_CAR WITH (NOLOCK) ON T_CAR.ID_CARGO = T_PER.ID_CARGO
-          WHERE 
-              C.PERIODO = CONVERT(VARCHAR(6), GETDATE(), 112)
-              AND C.SALDO_PRES > 0            
-              AND P.SALDO_PRES > 0  
-              AND P.FECHA_VCMTO >= CAST(GETDATE() AS DATE)
-              AND P.FECHA_VCMTO <= DATEADD(day, 5, CAST(GETDATE() AS DATE))
-              AND T_CAR.DESCRIP LIKE '%ANALISTA DE CREDITOS%'
-              AND T_USU.ID_USER NOT IN ('PRECASTIGO', 'RJULI6', 'RJULIACA', 'RLIMA7', 'RQUILLA3', 'RSICUA4', 'LHR5', 'HTEJ5', 'TKPN5', 'GHVJ5', 'OTA5', 'SDHF5', 'CMN5', 'HQND5', 'RTRES')
-      )
-      SELECT * FROM ReporteGestionPreventiva
-      ORDER BY [dias_para_vencimiento] ASC, [saldo_numerico] DESC;
-    `);
-    res.json(result.recordset);
+    const result = await pool.request().input("agencia", sql2.VarChar(60), agencia).input("analista", sql2.VarChar(150), analista).query(`
+        WITH ReporteGestionPreventiva AS (
+            SELECT 
+                CASE (
+                    CASE
+                        WHEN T_ANA.ID_AGE = '98' THEN
+                            CASE
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%10' THEN '10' 
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%11' THEN '11' 
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%12' THEN '12' 
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%13' THEN '13' 
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%6'  THEN '06' 
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%7'  THEN '07' 
+                                ELSE '98'
+                            END
+                        WHEN T_ANA.ID_AGE = '01' THEN
+                            CASE
+                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%9' THEN '09'
+                                ELSE '01'
+                            END
+                        ELSE T_ANA.ID_AGE
+                    END
+                )
+                    WHEN '01' THEN 'Wanchaq'
+                    WHEN '02' THEN 'San Jer\xF3nimo'
+                    WHEN '03' THEN 'Quillabamba'
+                    WHEN '04' THEN 'Sicuani'
+                    WHEN '05' THEN 'Molino'
+                    WHEN '06' THEN 'Juliaca'
+                    WHEN '07' THEN 'Lima Los Olivos'
+                    WHEN '08' THEN 'Tica Tica'
+                    WHEN '09' THEN 'Magisterio'
+                    WHEN '10' THEN 'Lima SJL'
+                    WHEN '11' THEN 'Chiclayo'
+                    WHEN '12' THEN 'Arequipa'
+                    WHEN '13' THEN 'Pucallpa'
+                    ELSE 'Otra Agencia'
+                END AS [agencia],
+                ISNULL(S.RAZON_SOCIAL, LTRIM(RTRIM(S.APE_PATERNO)) + ' ' + LTRIM(RTRIM(S.APE_MATERNO)) + ', ' + LTRIM(RTRIM(S.NOMBRE))) AS [socio],
+                ISNULL(S.TLF_CEL1, ISNULL(S.TLF_CEL2, 'SIN TELEFONO')) AS [telefono],
+                TP.NOM_PROD AS [producto],
+                C.SALDO_PRES AS [saldo_numerico],
+                FORMAT(C.SALDO_PRES, 'N2', 'es-ES') AS [saldo_formateado],
+                LTRIM(RTRIM(T_PER.RAZON)) AS [analista],
+                CONVERT(VARCHAR(10), P.FECHA_VCMTO, 103) AS [fecha_vencimiento],
+                DATEDIFF(day, GETDATE(), P.FECHA_VCMTO) AS [dias_para_vencimiento]
+            FROM [TRANSACMIF].[dbo].[PREEC] C WITH (NOLOCK)
+            INNER JOIN [TRANSACMIF].[dbo].[SOCIOS] S WITH (NOLOCK) ON C.CUENTA = S.CUENTA
+            INNER JOIN [TRANSACMIF].[dbo].[PRESTAMO] P WITH (NOLOCK) ON C.PAGARE = P.PAGARE
+            LEFT JOIN [TRANSACMIF].[dbo].[TIPOPROD] TP WITH (NOLOCK) ON C.TIPO_PROD = TP.TIPO_PROD
+            INNER JOIN [SEGURIDAD].[dbo].[ANAREC] T_ANA WITH (NOLOCK) ON T_ANA.ID_ANAREC = C.ID_ANA AND T_ANA.FLAG_ANAREC = 'A'
+            INNER JOIN [SEGURIDAD].[dbo].[USUARIOS] T_USU WITH (NOLOCK) ON T_USU.ID_USER = T_ANA.ID_USER
+            INNER JOIN [SEGURIDAD].[dbo].[GRUPOUSER] T_GRU WITH (NOLOCK) ON T_GRU.ID_GRUPO = T_USU.ID_GRUPO AND T_GRU.NOM_GRUPO = 'CREDITOS'
+            INNER JOIN [SEGURIDAD].[dbo].[PERSONAL] T_PER WITH (NOLOCK) ON T_PER.DNI = T_USU.DNI
+            INNER JOIN [SEGURIDAD].[dbo].[TCARGO_USER] T_CAR WITH (NOLOCK) ON T_CAR.ID_CARGO = T_PER.ID_CARGO
+            WHERE 
+                C.PERIODO = CONVERT(VARCHAR(6), GETDATE(), 112)
+                AND C.SALDO_PRES > 0            
+                AND P.SALDO_PRES > 0  
+                AND P.FECHA_VCMTO >= CAST(GETDATE() AS DATE)
+                AND P.FECHA_VCMTO <= DATEADD(day, 5, CAST(GETDATE() AS DATE))
+                AND T_CAR.DESCRIP LIKE '%ANALISTA DE CREDITOS%'
+                AND T_USU.ID_USER NOT IN ('PRECASTIGO', 'RJULI6', 'RJULIACA', 'RLIMA7', 'RQUILLA3', 'RSICUA4', 'LHR5', 'HTEJ5', 'TKPN5', 'GHVJ5', 'OTA5', 'SDHF5', 'CMN5', 'HQND5', 'RTRES')
+        )
+        SELECT * FROM ReporteGestionPreventiva
+        WHERE (@agencia = '' OR [agencia] = @agencia)
+          AND (@analista = '' OR [analista] LIKE '%' + @analista + '%')
+        ORDER BY [dias_para_vencimiento] ASC, [saldo_numerico] DESC;
+      `);
+    res.json(result.recordset || []);
   } catch (error2) {
-    console.error("Error en BD:", error2);
+    console.error("Error en /gestion-preventiva:", error2);
     res.status(500).json({ error: "Error obteniendo datos de Gesti\xF3n Preventiva" });
   }
 });
@@ -34733,9 +34740,16 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
         `),
         pool.request().query(`
           SELECT DISTINCT 
-              [Periodo], [IdSAgencia], [IdSAsesor], [Asesor], [AsesorNombresApellidos] 
+              RTRIM(LTRIM([Periodo])) AS [Periodo], 
+              RIGHT('00' + RTRIM(LTRIM([IdSAgencia])), 2) AS [IdSAgencia], 
+              RTRIM(LTRIM([IdSAsesor])) AS [IdSAsesor], 
+              RTRIM(LTRIM([Asesor])) AS [Asesor], 
+              RTRIM(LTRIM([AsesorNombresApellidos])) AS [AsesorNombresApellidos],
+              RTRIM(LTRIM([Cargo])) AS [Cargo]
           FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE [Asesor] IS NOT NULL AND [AsesorNombresApellidos] IS NOT NULL
+          WHERE [Asesor] IS NOT NULL 
+            AND [AsesorNombresApellidos] IS NOT NULL
+            AND RTRIM(LTRIM([Cargo])) IN ('ANALISTA DE CREDITOS I', 'RECUPERADOR')
         `),
         pool.request().query(`
           SELECT 
@@ -34760,7 +34774,6 @@ router3.get(["/filtros", "/api/filtros"], async (_req, res) => {
       fechas: cachedCatalogs.fechas,
       ultimaActualizacion: logs.etl.etiqueta,
       logsPorModulo: logs,
-      // 👈 Contiene las 5 horas y descripciones independientes (etl, gerencial, ranking, mora, vivo)
       versionSignature: getCombinedVersionSignature()
     });
   } catch (error2) {
@@ -34772,13 +34785,13 @@ var filtros_default = router3;
 
 // src/routes/calendario.ts
 var import_express4 = __toESM(require_express2(), 1);
-import sql2 from "mssql";
+import sql3 from "mssql";
 var router4 = (0, import_express4.Router)();
 router4.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql2.VarChar(6), periodo).query(`
+    const result = await request.input("periodo", sql3.VarChar(6), periodo).query(`
         -- 1. Obtenemos Fecha y Hora de Per\xFA (-5 UTC)
         DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
         DECLARE @Hoy DATE = CAST(@FechaHoraPeru AS DATE);
@@ -34844,13 +34857,13 @@ var calendario_default = router4;
 
 // src/routes/gerencia.ts
 var import_express5 = __toESM(require_express2(), 1);
-import sql3 from "mssql";
+import sql4 from "mssql";
 var router5 = (0, import_express5.Router)();
 router5.get(["/indicadores-gerencia/:periodo", "/api/indicadores-gerencia/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql3.VarChar(6), periodo).query(`
+    const result = await request.input("periodo", sql4.VarChar(6), periodo).query(`
         -- =================================================================
         -- QUERY 1: CARTERA COMERCIAL (Excluyendo Recuperadores)
         -- =================================================================
@@ -34988,13 +35001,13 @@ var gerencia_default = router5;
 
 // src/routes/supervision.ts
 var import_express6 = __toESM(require_express2(), 1);
-import sql4 from "mssql";
+import sql5 from "mssql";
 var router6 = (0, import_express6.Router)();
 router6.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql4.VarChar(6), periodo).query(`
+    const result = await request.input("periodo", sql5.VarChar(6), periodo).query(`
         -- =================================================================
         -- 1. AGENCIA COMPLETA (Comerciales + Recuperadores)
         -- =================================================================
@@ -35206,7 +35219,7 @@ var supervision_default = router6;
 
 // src/routes/agencia.ts
 var import_express7 = __toESM(require_express2(), 1);
-import sql5 from "mssql";
+import sql6 from "mssql";
 var router7 = (0, import_express7.Router)();
 router7.get(["/agencia", "/api/agencia"], async (req, res) => {
   const periodo = req.query.periodo;
@@ -35215,7 +35228,7 @@ router7.get(["/agencia", "/api/agencia"], async (req, res) => {
   }
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql5.VarChar(6), periodo).query(`
+    const result = await request.input("periodo", sql6.VarChar(6), periodo).query(`
         -- =================================================================
         -- 1. ASESORES COMERCIALES
         -- =================================================================
@@ -35378,13 +35391,13 @@ var agencia_default = router7;
 
 // src/routes/asesores.ts
 var import_express8 = __toESM(require_express2(), 1);
-import sql6 from "mssql";
+import sql7 from "mssql";
 var router8 = (0, import_express8.Router)();
 router8.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql6.VarChar(6), periodo).query(`
+    const result = await request.input("periodo", sql7.VarChar(6), periodo).query(`
         WITH CTE_Asesores_Com AS (
             SELECT 
                 RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
@@ -35500,14 +35513,14 @@ var asesores_default = router8;
 
 // src/routes/diaria.ts
 var import_express9 = __toESM(require_express2(), 1);
-import sql7 from "mssql";
+import sql8 from "mssql";
 var router9 = (0, import_express9.Router)();
 router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
   const { periodo } = req.params;
   const dayFilter = req.query.day || "Hoy";
   try {
     const request = pool.request();
-    const result = await request.input("periodo", sql7.VarChar(6), periodo).input("dayFilter", sql7.VarChar(20), dayFilter).query(`
+    const result = await request.input("periodo", sql8.VarChar(6), periodo).input("dayFilter", sql8.VarChar(20), dayFilter).query(`
         DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
         DECLARE @TargetDate DATE;
 
@@ -35533,21 +35546,31 @@ router9.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req, res) => {
             ORDER BY Fecha DESC;
         END
 
-        -- 1. Resumen por Agencias
+        -- 1. Resumen por Agencias (Con IdSAgencia normalizado a 2 caracteres)
         ;WITH CTE_Agencias AS (
-            SELECT DISTINCT IdSAgencia FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) WHERE Periodo = @periodo
+            SELECT DISTINCT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia 
+            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) 
+            WHERE Periodo = @periodo
         ),
         CTE_MetasProy AS (
-            SELECT IdSAgencia, ColocacionNumMeta, ColocacionNumProy, ColocacionMontoMeta, ColocacionMontoProy
-            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
+                SUM(ISNULL(ColocacionNumMeta, 0)) AS ColocacionNumMeta, 
+                SUM(ISNULL(ColocacionNumProy, 0)) AS ColocacionNumProy, 
+                SUM(ISNULL(ColocacionMontoMeta, 0)) AS ColocacionMontoMeta, 
+                SUM(ISNULL(ColocacionMontoProy, 0)) AS ColocacionMontoProy
+            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) 
+            WHERE Fecha = @TargetDate
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
         ),
         CTE_Logrado AS (
-            SELECT IdSAgencia, 
-                   ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
-                   ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
+                ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
+                ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
             FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
             WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @TargetDate
-            GROUP BY IdSAgencia
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
         )
         SELECT 
             CASE A.IdSAgencia 
@@ -35601,66 +35624,143 @@ var diaria_default = router9;
 
 // src/routes/evolucion.ts
 var import_express10 = __toESM(require_express2(), 1);
-import sql8 from "mssql";
+import sql9 from "mssql";
 var router10 = (0, import_express10.Router)();
 router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
   const agenciaParam = req.query.agencia || "";
   const asesorParam = req.query.asesor || "";
   const granularidad = req.query.granularidad || "Mensual";
-  const desde = req.query.desde;
-  const hasta = req.query.hasta;
-  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
-  const asesor = asesorParam === "Todos" ? "" : asesorParam;
+  const desde = req.query.desde || "";
+  const hasta = req.query.hasta || "";
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim();
+  const asesor = asesorParam === "Todos" || asesorParam === "Todos los Analistas" ? "" : asesorParam.trim();
   try {
     const request = pool.request();
     let querySQL = "";
     if (granularidad === "Mensual") {
       querySQL = `
         WITH Calendario AS (
-            SELECT DISTINCT Periodo, MAX(MesLargo + ' ' + CAST(A\xF1o AS VARCHAR)) AS Etiqueta
+            SELECT DISTINCT 
+                RTRIM(LTRIM(Periodo)) AS Periodo, 
+                MAX(MesLargo + ' ' + CAST(A\xF1o AS VARCHAR)) AS Etiqueta
             FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
-            WHERE Periodo >= @desde AND Periodo <= @hasta
-            GROUP BY Periodo
+            WHERE RTRIM(LTRIM(Periodo)) >= @desde AND RTRIM(LTRIM(Periodo)) <= @hasta
+            GROUP BY RTRIM(LTRIM(Periodo))
+        ),
+        AsesoresValidos AS (
+            SELECT 
+                RTRIM(LTRIM(D_AS.Periodo)) AS Periodo,
+                RTRIM(LTRIM(D_AS.IdSAsesor)) AS IdSAsesor,
+                MAX(RIGHT('00' + RTRIM(LTRIM(D_AS.IdSAgencia)), 2)) AS IdSAgencia,
+                ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS MetaOpAsesor
+            FROM DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK)
+                ON RIGHT('00' + RTRIM(LTRIM(D_AS.IdSAgencia)), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
+            WHERE RTRIM(LTRIM(D_AS.Cargo)) = 'ANALISTA DE CREDITOS I'
+              AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
+              AND (
+                @asesor = '' 
+                OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor 
+                OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor
+                OR RTRIM(LTRIM(D_AS.IdSAsesor)) = @asesor
+              )
+            GROUP BY RTRIM(LTRIM(D_AS.Periodo)), RTRIM(LTRIM(D_AS.IdSAsesor))
+        ),
+        MetasAgencia AS (
+            SELECT 
+                RTRIM(LTRIM(M.Periodo)) AS Periodo,
+                SUM(CASE WHEN ISNULL(M.ColocacionMontoMetaAjus, 0) > 0 THEN M.ColocacionMontoMetaAjus ELSE ISNULL(M.ColocacionMontoMeta, 0) END) AS MetaMontoAgencia,
+                SUM(CASE WHEN ISNULL(M.ColocacionNumMetaAjus, 0) > 0 THEN M.ColocacionNumMetaAjus ELSE ISNULL(M.ColocacionNumMeta, 0) END) AS MetaNumAgencia
+            FROM dm_productividad.dbo.FctMensual M WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK)
+                ON RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
+            WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
+            GROUP BY RTRIM(LTRIM(M.Periodo))
+        ),
+        FlowPorAsesor AS (
+            SELECT 
+                RTRIM(LTRIM(F.Periodo)) AS Periodo,
+                RTRIM(LTRIM(F.IdSAsesor)) AS IdSAsesor,
+                ISNULL(SUM(F.ColocacionMontoReal), 0) AS ColocacionMonto,
+                ISNULL(SUM(F.RepagoReal), 0) AS Repagos,
+                ISNULL(SUM(F.ColocacionNumReal), 0) AS ColocacionNumReal
+            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
+            WHERE RTRIM(LTRIM(F.Periodo)) >= @desde AND RTRIM(LTRIM(F.Periodo)) <= @hasta
+            GROUP BY RTRIM(LTRIM(F.Periodo)), RTRIM(LTRIM(F.IdSAsesor))
         ),
         Flow AS (
             SELECT 
-                F.Periodo, 
-                SUM(F.ColocacionMontoReal) AS ColocacionMonto, 
-                SUM(F.RepagoReal) AS Repagos,
-                SUM(F.ColocacionNumReal) AS ColocacionNumReal,
-                ISNULL(MAX(M.ColocacionMontoMetaAjus), ISNULL(MAX(M.ColocacionMontoMeta), 0)) AS ColocacionMetaMonto,
-                ISNULL(MAX(M.ColocacionNumMetaAjus), ISNULL(MAX(M.ColocacionNumMeta), 0)) AS ColocacionMetaNumAgencia,
-                ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
-            FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
-            LEFT JOIN dm_productividad.dbo.FctMensual M WITH (NOLOCK) ON F.Periodo = M.Periodo AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
-            WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
-              AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-            GROUP BY F.Periodo
+                AV.Periodo,
+                ISNULL(SUM(FP.ColocacionMonto), 0) AS ColocacionMonto,
+                ISNULL(SUM(FP.Repagos), 0) AS Repagos,
+                ISNULL(SUM(FP.ColocacionNumReal), 0) AS ColocacionNumReal,
+                ISNULL(SUM(AV.MetaOpAsesor), 30) AS MetaNumAsesor
+            FROM AsesoresValidos AV
+            LEFT JOIN FlowPorAsesor FP 
+                ON AV.Periodo = FP.Periodo AND AV.IdSAsesor = FP.IdSAsesor
+            GROUP BY AV.Periodo
+        ),
+        CarteraInic AS (
+            SELECT
+                RTRIM(LTRIM(CI.Periodo)) AS Periodo,
+                ISNULL(SUM(CI.CarteraInicial), 0) AS CarteraInicial
+            FROM dm_productividad.dbo.fct_stock_manubl_asesor_month CI WITH (NOLOCK)
+            INNER JOIN AsesoresValidos AV
+                ON RTRIM(LTRIM(CI.Periodo)) = AV.Periodo
+                AND RTRIM(LTRIM(CI.IdSAsesor)) = AV.IdSAsesor
+            GROUP BY RTRIM(LTRIM(CI.Periodo))
         ),
         Stock AS (
             SELECT 
-                S.Periodo, SUM(S.Cartera) AS CarteraTotal, SUM(S.Mora31) AS Mora31Total
+                RTRIM(LTRIM(S.Periodo)) AS Periodo,
+                ISNULL(SUM(S.Cartera), 0) AS CarteraStock,
+                ISNULL(SUM(S.Mora9), 0) AS MoraCppTotal,
+                ISNULL(SUM(S.Mora31), 0) AS Mora31Total,
+                ISNULL(SUM(S.Mora150), 0) AS Mora150Total,
+                ISNULL(SUM(S.NroSociosAnterior), 0) AS SociosInicio,
+                ISNULL(SUM(S.NroSocios), 0) AS SociosActual,
+                ISNULL(SUM(S.NroSociosCancelados), 0) AS SociosCancelados,
+                ISNULL(SUM(S.NroSociosRecuperacion), 0) AS SociosRecuperacion,
+                ISNULL(SUM(S.NroSociosTraspasados), 0) AS SociosTraspasados,
+                ISNULL(SUM(S.NroSociosActivos), 0) AS SociosActivos
             FROM DWH_Gestion_Cartera.dbo.fct_stock S WITH (NOLOCK)
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON S.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON S.IdSAsesor = D_AS.IdSAsesor AND S.Periodo = D_AS.Periodo
-            WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
-              AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-            GROUP BY S.Periodo
+            INNER JOIN AsesoresValidos AV 
+                ON RTRIM(LTRIM(S.Periodo)) = AV.Periodo 
+                AND RTRIM(LTRIM(S.IdSAsesor)) = AV.IdSAsesor
+            GROUP BY RTRIM(LTRIM(S.Periodo))
         )
         SELECT 
-            C.Periodo AS periodo, C.Etiqueta AS etiqueta,
-            ISNULL(F.ColocacionMonto, 0) AS colocacionMonto, ISNULL(F.Repagos, 0) AS repagos,
+            C.Periodo AS periodo,
+            C.Etiqueta AS etiqueta,
+            ISNULL(F.ColocacionMonto, 0) AS colocacionMonto,
+            ISNULL(F.Repagos, 0) AS repagos,
             ISNULL(F.ColocacionNumReal, 0) AS colocacionNumReal,
             (ISNULL(F.ColocacionMonto, 0) - ISNULL(F.Repagos, 0)) AS crecimientoBruto,
-            CASE WHEN @asesor <> '' THEN 0 ELSE ISNULL(F.ColocacionMetaMonto, 0) END AS colocacionMeta,
-            CASE WHEN @asesor <> '' THEN ISNULL(F.ColocacionMetaNumAsesor, 0) ELSE ISNULL(F.ColocacionMetaNumAgencia, 0) END AS colocacionNumMeta,
-            ISNULL(S.CarteraTotal, 0) AS carteraTotal, ISNULL(S.Mora31Total, 0) AS mora31Total,
-            CASE WHEN ISNULL(S.CarteraTotal, 0) > 0 THEN (CAST(S.Mora31Total AS FLOAT) / S.CarteraTotal) * 100 ELSE 0 END AS pctMora31
+            ((ISNULL(F.ColocacionMonto, 0) - ISNULL(F.Repagos, 0)) - ISNULL(S.Mora150Total, 0)) AS crecimientoNeto150,
+            CASE WHEN @asesor <> '' THEN (ISNULL(F.MetaNumAsesor, 30) * 2500) ELSE ISNULL(MA.MetaMontoAgencia, 0) END AS colocacionMeta,
+            CASE WHEN @asesor <> '' THEN ISNULL(F.MetaNumAsesor, 30) ELSE ISNULL(MA.MetaNumAgencia, 0) END AS colocacionNumMeta,
+            COALESCE(NULLIF(CI.CarteraInicial, 0), S.CarteraStock, 0) AS carteraTotal,
+            ISNULL(S.MoraCppTotal, 0) AS moraCppTotal,
+            ISNULL(S.Mora31Total, 0) AS mora31Total,
+            ISNULL(S.Mora150Total, 0) AS mora150Total,
+            CASE WHEN COALESCE(NULLIF(CI.CarteraInicial, 0), S.CarteraStock, 0) > 0 
+                 THEN (CAST(ISNULL(S.MoraCppTotal, 0) AS FLOAT) / COALESCE(NULLIF(CI.CarteraInicial, 0), S.CarteraStock, 0)) * 100 
+                 ELSE 0 END AS pctMoraCpp,
+            CASE WHEN COALESCE(NULLIF(CI.CarteraInicial, 0), S.CarteraStock, 0) > 0 
+                 THEN (CAST(ISNULL(S.Mora31Total, 0) AS FLOAT) / COALESCE(NULLIF(CI.CarteraInicial, 0), S.CarteraStock, 0)) * 100 
+                 ELSE 0 END AS pctMora31,
+            ISNULL(S.SociosInicio, 0) AS sociosInicio,
+            ISNULL(S.SociosActual, 0) AS sociosActual,
+            (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
+            ISNULL(S.SociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
+            ISNULL(S.SociosTraspasados, 0) AS sociosTraspasados,
+            ISNULL(S.SociosActivos, 0) AS sociosActivos
         FROM Calendario C
         LEFT JOIN Flow F ON C.Periodo = F.Periodo
+        LEFT JOIN MetasAgencia MA ON C.Periodo = MA.Periodo
         LEFT JOIN Stock S ON C.Periodo = S.Periodo
+        LEFT JOIN CarteraInic CI ON C.Periodo = CI.Periodo
         ORDER BY C.Periodo ASC;
       `;
     } else {
@@ -35670,37 +35770,53 @@ router10.get(["/evolucion", "/api/evolucion"], async (req, res) => {
             FROM dm_productividad.dbo.dim_calendario WITH (NOLOCK)
             WHERE Fecha >= @desde AND Fecha <= @hasta
         ),
+        MetasDiarias AS (
+            SELECT 
+                M.Fecha,
+                SUM(ISNULL(M.ColocacionMontoMeta, 0)) AS MetaMontoDia,
+                SUM(ISNULL(M.ColocacionNumMeta, 0)) AS MetaNumDia
+            FROM dm_productividad.dbo.FctDiario_MetaProy M WITH (NOLOCK)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK)
+                ON RIGHT('00' + RTRIM(LTRIM(CAST(M.IdSAgencia AS VARCHAR(5)))), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
+            WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
+            GROUP BY M.Fecha
+        ),
         Flow AS (
             SELECT 
                 F.Fecha, 
                 SUM(F.ColocacionMontoReal) AS ColocacionMonto, 
                 SUM(F.RepagoReal) AS Repagos,
-                SUM(F.ColocacionNumReal) AS ColocacionNumReal,
-                ISNULL(MAX(M.ColocacionMontoMeta), 0) AS ColocacionMetaMonto,
-                ISNULL(MAX(M.ColocacionNumMeta), 0) AS ColocacionMetaNumAgencia,
-                ISNULL(MAX(D_AS.ColocacionNumMeta), 30) AS ColocacionMetaNumAsesor
+                SUM(F.ColocacionNumReal) AS ColocacionNumReal
             FROM DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK)
-            LEFT JOIN dm_productividad.dbo.FctDiario_MetaProy M WITH (NOLOCK) ON F.Fecha = M.Fecha AND F.IdSAgencia = M.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) ON F.IdSAgencia = DA.IdSAgencia
-            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) ON F.IdSAsesor = D_AS.IdSAsesor AND F.Periodo = D_AS.Periodo
-            WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_agencia DA WITH (NOLOCK) 
+                ON RIGHT('00' + RTRIM(LTRIM(F.IdSAgencia)), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
+            LEFT JOIN DWH_Gestion_Cartera.dbo.dim_asesor D_AS WITH (NOLOCK) 
+                ON RTRIM(LTRIM(F.IdSAsesor)) = RTRIM(LTRIM(D_AS.IdSAsesor)) AND F.Periodo = D_AS.Periodo
+            WHERE RTRIM(LTRIM(D_AS.Cargo)) = 'ANALISTA DE CREDITOS I'
+              AND (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia) 
               AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
             GROUP BY F.Fecha
         )
         SELECT 
-            CONVERT(VARCHAR(10), C.Fecha, 120) AS periodo, C.Etiqueta AS etiqueta,
-            ISNULL(F.ColocacionMonto, 0) AS colocacionMonto, ISNULL(F.Repagos, 0) AS repagos,
+            CONVERT(VARCHAR(10), C.Fecha, 120) AS periodo,
+            C.Etiqueta AS etiqueta,
+            ISNULL(F.ColocacionMonto, 0) AS colocacionMonto,
+            ISNULL(F.Repagos, 0) AS repagos,
             ISNULL(F.ColocacionNumReal, 0) AS colocacionNumReal,
             (ISNULL(F.ColocacionMonto, 0) - ISNULL(F.Repagos, 0)) AS crecimientoBruto,
-            CASE WHEN @asesor <> '' THEN 0 ELSE ISNULL(F.ColocacionMetaMonto, 0) END AS colocacionMeta,
-            CASE WHEN @asesor <> '' THEN ISNULL(F.ColocacionMetaNumAsesor, 0) ELSE ISNULL(F.ColocacionMetaNumAgencia, 0) END AS colocacionNumMeta,
-            0 AS carteraTotal, 0 AS mora31Total, 0 AS pctMora31
+            (ISNULL(F.ColocacionMonto, 0) - ISNULL(F.Repagos, 0)) AS crecimientoNeto150,
+            CASE WHEN @asesor <> '' THEN 0 ELSE ISNULL(MD.MetaMontoDia, 0) END AS colocacionMeta,
+            CASE WHEN @asesor <> '' THEN 2 ELSE ISNULL(MD.MetaNumDia, 0) END AS colocacionNumMeta,
+            0 AS carteraTotal, 0 AS moraCppTotal, 0 AS mora31Total, 0 AS mora150Total,
+            0 AS pctMoraCpp, 0 AS pctMora31,
+            0 AS sociosInicio, 0 AS sociosActual, 0 AS sociosNuevos, 0 AS sociosRecuperacion, 0 AS sociosCancelados, 0 AS sociosTraspasados, 0 AS sociosActivos
         FROM Calendario C
         LEFT JOIN Flow F ON C.Fecha = F.Fecha
+        LEFT JOIN MetasDiarias MD ON C.Fecha = MD.Fecha
         ORDER BY C.Fecha ASC;
       `;
     }
-    const result = await request.input("agencia", sql8.VarChar(50), agencia).input("asesor", sql8.VarChar(100), asesor).input("desde", sql8.VarChar(10), desde).input("hasta", sql8.VarChar(10), hasta).query(querySQL);
+    const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("desde", sql9.VarChar(10), desde).input("hasta", sql9.VarChar(10), hasta).query(querySQL);
     res.json(result.recordset);
   } catch (error2) {
     console.error("Error obteniendo Evoluci\xF3n:", error2);
@@ -35711,7 +35827,7 @@ var evolucion_default = router10;
 
 // src/routes/cancelados.ts
 var import_express11 = __toESM(require_express2(), 1);
-import sql9 from "mssql";
+import sql10 from "mssql";
 var router11 = (0, import_express11.Router)();
 router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
   const agenciaParam = req.query.agencia || "";
@@ -35774,7 +35890,7 @@ router11.get(["/cancelados", "/api/cancelados"], async (req, res) => {
       ORDER BY C.[Fecha_Cancelacion] DESC, C.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
-    const result = await request.input("agencia", sql9.VarChar(50), agencia).input("asesor", sql9.VarChar(100), asesor).input("tipoCancelacion", sql9.VarChar(50), tipoCancelacion).input("frecuencia", sql9.VarChar(50), frecuencia).input("vista", sql9.VarChar(20), vista).input("offset", sql9.Int, offset).input("limit", sql9.Int, limit).query(querySQL);
+    const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).input("tipoCancelacion", sql10.VarChar(50), tipoCancelacion).input("frecuencia", sql10.VarChar(50), frecuencia).input("vista", sql10.VarChar(20), vista).input("offset", sql10.Int, offset).input("limit", sql10.Int, limit).query(querySQL);
     res.json(result.recordset || []);
   } catch (error2) {
     console.error("Error obteniendo Cr\xE9ditos Cancelados:", error2);
@@ -35785,7 +35901,7 @@ var cancelados_default = router11;
 
 // src/routes/avance.ts
 var import_express12 = __toESM(require_express2(), 1);
-import sql10 from "mssql";
+import sql11 from "mssql";
 var router12 = (0, import_express12.Router)();
 router12.get(["/avance", "/api/avance"], async (req, res) => {
   const agenciaParam = req.query.agencia || "";
@@ -35827,7 +35943,7 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
       ORDER BY A.[Avance Cartera] DESC, A.Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
-    const result = await request.input("agencia", sql10.VarChar(50), agencia).input("asesor", sql10.VarChar(100), asesor).input("offset", sql10.Int, offset).input("limit", sql10.Int, limit).query(querySQL);
+    const result = await request.input("agencia", sql11.VarChar(50), agencia).input("asesor", sql11.VarChar(100), asesor).input("offset", sql11.Int, offset).input("limit", sql11.Int, limit).query(querySQL);
     res.json(result.recordset || []);
   } catch (error2) {
     console.error("Error obteniendo Avance de Cartera:", error2);
@@ -36015,7 +36131,7 @@ var pagosMora_default = router15;
 
 // src/routes/welcome.ts
 var import_express16 = __toESM(require_express2(), 1);
-import sql11 from "mssql";
+import sql12 from "mssql";
 var router16 = (0, import_express16.Router)();
 var AGENCY_MAP = {
   "01": "Wanchaq",
@@ -36129,9 +36245,9 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
       ORDER BY RTRIM(LTRIM([Periodo])) DESC
     `);
     const periodosDisponibles = periodosRes.recordset.map((p) => p.Periodo);
-    const periodo = periodoReq || periodosDisponibles[0] || "202610";
+    const periodo = periodoReq || periodosDisponibles[0] || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7).replace("-", "");
     const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
-    await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+    await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
       IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
       BEGIN
         DECLARE @UltimoPeriodoAdmin VARCHAR(6) = (
@@ -36148,7 +36264,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
         END
       END
     `);
-    const kpiRequest = pool.request().input("periodo", sql11.VarChar(6), periodo).input("idAgencia", sql11.VarChar(2), idAgencia).input("asesor", sql11.VarChar(150), asesorReq.trim());
+    const kpiRequest = pool.request().input("periodo", sql12.VarChar(6), periodo).input("idAgencia", sql12.VarChar(2), idAgencia).input("asesor", sql12.VarChar(150), asesorReq.trim());
     const kpiResult = await kpiRequest.query(`
       DECLARE @FechaBase DATE = TRY_CAST(@periodo + '01' AS DATE);
       DECLARE @periodoAnt VARCHAR(6) = CASE 
@@ -36308,7 +36424,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
       LEFT JOIN Actual ACT ON 1 = 1
       LEFT JOIN Anterior ANT ON 1 = 1;
     `);
-    const prodVivoRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+    const prodVivoRes = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
       DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
 
       WITH Agencias AS (
@@ -36388,7 +36504,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
       LEFT JOIN LogradoHoy L ON A.IdSAgencia = L.IdSAgencia
       ORDER BY A.IdSAgencia ASC;
     `);
-    const metasMensualesRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+    const metasMensualesRes = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
       WITH Agencias AS (
         SELECT * FROM (VALUES
           ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
@@ -36416,7 +36532,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
         AND M.Periodo = @periodo
       ORDER BY A.IdSAgencia ASC;
     `);
-    const historialMetasRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+    const historialMetasRes = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
       SELECT TOP 25
         [Id] AS id,
         [Periodo] AS periodo,
@@ -36428,7 +36544,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
       FROM [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales] WITH (NOLOCK)
       ORDER BY [Fecha_Hora] DESC;
     `);
-    const adminsRes = await pool.request().input("periodo", sql11.VarChar(6), periodo).query(`
+    const adminsRes = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
       WITH Agencias AS (
         SELECT * FROM (VALUES
           ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
@@ -36452,7 +36568,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
         AND AD.Periodo = @periodo
       ORDER BY A.IdSAgencia ASC;
     `);
-    const moraRes = await pool.request().input("idAgencia", sql11.VarChar(2), idAgencia).input("asesor", sql11.VarChar(150), asesorReq.trim()).query(`
+    const moraRes = await pool.request().input("idAgencia", sql12.VarChar(2), idAgencia).input("asesor", sql12.VarChar(150), asesorReq.trim()).query(`
         DECLARE @UltimaFecha DATE = (
           SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
         );
@@ -36517,7 +36633,7 @@ router16.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
           )
         ORDER BY R.[Saldo_Capital] DESC;
       `);
-    const metaAsesorHoyRes = await pool.request().input("asesor", sql11.VarChar(150), asesorReq.trim()).query(`
+    const metaAsesorHoyRes = await pool.request().input("asesor", sql12.VarChar(150), asesorReq.trim()).query(`
         SELECT TOP 1
           [Meta_Op_Dia] AS metaOpDia,
           [Meta_Monto_Dia] AS metaMontoDia,
@@ -36558,7 +36674,7 @@ router16.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (r
     if (!Array.isArray(filas) || filas.length === 0) {
       return res.status(400).json({ error: "No se enviaron filas para guardar" });
     }
-    const transaction = new sql11.Transaction(pool);
+    const transaction = new sql12.Transaction(pool);
     await transaction.begin();
     try {
       for (const f of filas) {
@@ -36569,7 +36685,7 @@ router16.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (r
         const sugMonto = f.sugerenciaMontoGerencia !== void 0 ? Number(f.sugerenciaMontoGerencia) : null;
         const proyOpAdmin = f.proyeccionColocacion !== void 0 ? Number(f.proyeccionColocacion) : null;
         const proyMontoAdmin = f.proyeccionMonto !== void 0 ? Number(f.proyeccionMonto) : null;
-        await new sql11.Request(transaction).input("idAge", sql11.VarChar(2), idAge).input("opFaltantes", sql11.Int, opFaltantes).input("crecFaltante", sql11.Float, crecFaltante).input("sugOp", sql11.Int, sugOp).input("sugMonto", sql11.Float, sugMonto).input("proyOpAdmin", sql11.Int, proyOpAdmin).input("proyMontoAdmin", sql11.Float, proyMontoAdmin).input("autor", sql11.VarChar(150), String(usuarioNombre || "Usuario")).input("rol", sql11.VarChar(50), String(usuarioRol || "GERENCIA")).query(`
+        await new sql12.Request(transaction).input("idAge", sql12.VarChar(2), idAge).input("opFaltantes", sql12.Int, opFaltantes).input("crecFaltante", sql12.Float, crecFaltante).input("sugOp", sql12.Int, sugOp).input("sugMonto", sql12.Float, sugMonto).input("proyOpAdmin", sql12.Int, proyOpAdmin).input("proyMontoAdmin", sql12.Float, proyMontoAdmin).input("autor", sql12.VarChar(150), String(usuarioNombre || "Usuario")).input("rol", sql12.VarChar(50), String(usuarioRol || "GERENCIA")).query(`
             DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
 
             IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge)
@@ -36630,7 +36746,7 @@ router16.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req, 
     const { idAsesor, asesorNombre, idAgencia, metaOpDia, metaMontoDia } = req.body;
     const idAge = String(idAgencia || "01").trim().padStart(2, "0");
     const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim();
-    await pool.request().input("idAsesor", sql11.VarChar(30), codigoAsesor).input("idAge", sql11.VarChar(2), idAge).input("nombre", sql11.VarChar(150), String(asesorNombre || codigoAsesor)).input("op", sql11.Int, Number(metaOpDia || 0)).input("monto", sql11.Float, Number(metaMontoDia || 0)).query(`
+    await pool.request().input("idAsesor", sql12.VarChar(30), codigoAsesor).input("idAge", sql12.VarChar(2), idAge).input("nombre", sql12.VarChar(150), String(asesorNombre || codigoAsesor)).input("op", sql12.Int, Number(metaOpDia || 0)).input("monto", sql12.Float, Number(metaMontoDia || 0)).query(`
         DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WHERE [Fecha] = @Hoy AND [IdSAsesor] = @idAsesor)
         BEGIN
@@ -36660,10 +36776,10 @@ router16.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
     if (!periodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son obligatorios" });
     }
-    const transaction = new sql11.Transaction(pool);
+    const transaction = new sql12.Transaction(pool);
     await transaction.begin();
     try {
-      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
+      await new sql12.Request(transaction).input("periodo", sql12.VarChar(6), String(periodo).trim()).query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
       let totalOpAjus = 0;
       let totalMontoAjus = 0;
       for (const row of filas) {
@@ -36671,7 +36787,7 @@ router16.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
         const montoAjus = Number(row.colocacionMontoMetaAjus || 0);
         totalOpAjus += opAjus;
         totalMontoAjus += montoAjus;
-        await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("idAge", sql11.Int, parseInt(String(row.idAgencia || "1"), 10)).input("opMeta", sql11.Int, Number(row.colocacionNumMeta || 0)).input("opAjus", sql11.Int, opAjus).input("montoMeta", sql11.Float, Number(row.colocacionMontoMeta || 0)).input("montoAjus", sql11.Float, montoAjus).input("asesores", sql11.Int, Number(row.numeroAsesores || 0)).input("asesoresAjus", sql11.Int, Number(row.numeroAsesoresAjus || 0)).input("crecAjus", sql11.Int, Number(row.crecimientoMetaAjus || row.crecimientoMeta || 0)).query(`
+        await new sql12.Request(transaction).input("periodo", sql12.VarChar(6), String(periodo).trim()).input("idAge", sql12.Int, parseInt(String(row.idAgencia || "1"), 10)).input("opMeta", sql12.Int, Number(row.colocacionNumMeta || 0)).input("opAjus", sql12.Int, opAjus).input("montoMeta", sql12.Float, Number(row.colocacionMontoMeta || 0)).input("montoAjus", sql12.Float, montoAjus).input("asesores", sql12.Int, Number(row.numeroAsesores || 0)).input("asesoresAjus", sql12.Int, Number(row.numeroAsesoresAjus || 0)).input("crecAjus", sql12.Int, Number(row.crecimientoMetaAjus || row.crecimientoMeta || 0)).query(`
             INSERT INTO [dm_productividad].[dbo].[FctMensual]
               ([Periodo], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumMetaAjus], [ColocacionMontoMeta], [ColocacionMontoMetaAjus], [NumeroAsesores], [NumeroAsesoresAjus], [CrecimientoMetaAjus])
             VALUES
@@ -36679,7 +36795,7 @@ router16.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
           `);
       }
       const resumen = `Actualiz\xF3 metas del periodo ${periodo} (${filas.length} agencias \xB7 Total Meta Op Ajustada: ${totalOpAjus} \xB7 Total Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
-      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("nombre", sql11.VarChar(150), String(usuarioNombre || "Super Admin")).input("email", sql11.VarChar(150), String(usuarioEmail || "")).input("rol", sql11.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).input("resumen", sql11.NVarChar(sql11.MAX), resumen).query(`
+      await new sql12.Request(transaction).input("periodo", sql12.VarChar(6), String(periodo).trim()).input("nombre", sql12.VarChar(150), String(usuarioNombre || "Super Admin")).input("email", sql12.VarChar(150), String(usuarioEmail || "")).input("rol", sql12.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).input("resumen", sql12.NVarChar(sql12.MAX), resumen).query(`
           INSERT INTO [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]
             ([Periodo], [Usuario_Nombre], [Usuario_Email], [Usuario_Rol], [Resumen_Cambio], [Fecha_Hora])
           VALUES (@periodo, @nombre, @email, @rol, @resumen, GETDATE());
@@ -36705,13 +36821,13 @@ router16.post(["/welcome/administradores", "/api/welcome/administradores"], asyn
     if (!periodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son requeridos" });
     }
-    const transaction = new sql11.Transaction(pool);
+    const transaction = new sql12.Transaction(pool);
     await transaction.begin();
     try {
-      await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
+      await new sql12.Request(transaction).input("periodo", sql12.VarChar(6), String(periodo).trim()).query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
       for (const r of filas) {
         const idAge = String(r.idAgencia || "01").trim().padStart(2, "0");
-        await new sql11.Request(transaction).input("periodo", sql11.VarChar(6), String(periodo).trim()).input("idAge", sql11.Char(2), idAge).input("nombre", sql11.NVarChar(100), String(r.nombre || "").trim()).input("celular", sql11.VarChar(30), String(r.celular || "").trim()).input("correoPers", sql11.VarChar(120), String(r.correoPersonal || "").trim()).input("correoCorp", sql11.VarChar(120), String(r.correoCorporativo || "").trim()).query(`
+        await new sql12.Request(transaction).input("periodo", sql12.VarChar(6), String(periodo).trim()).input("idAge", sql12.Char(2), idAge).input("nombre", sql12.NVarChar(100), String(r.nombre || "").trim()).input("celular", sql12.VarChar(30), String(r.celular || "").trim()).input("correoPers", sql12.VarChar(120), String(r.correoPersonal || "").trim()).input("correoCorp", sql12.VarChar(120), String(r.correoCorporativo || "").trim()).query(`
             INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
               ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
             VALUES (@periodo, @idAge, @nombre, @celular, @correoPers, @correoCorp)
@@ -36742,7 +36858,7 @@ router16.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], asyn
     const fechaProm = fechaPromesa && String(fechaPromesa).trim() !== "" ? String(fechaPromesa).trim() : null;
     const autor = String(usuarioNombre || "Usuario").trim();
     const rol = String(usuarioRol || "ANALISTA").trim();
-    await pool.request().input("pagare", sql11.VarChar(40), pagareClean).input("compromiso", sql11.NVarChar(500), compText).input("fechaPromesa", sql11.Date, fechaProm).input("autor", sql11.VarChar(150), autor).input("rol", sql11.VarChar(60), rol).query(`
+    await pool.request().input("pagare", sql12.VarChar(40), pagareClean).input("compromiso", sql12.NVarChar(500), compText).input("fechaPromesa", sql12.Date, fechaProm).input("autor", sql12.VarChar(150), autor).input("rol", sql12.VarChar(60), rol).query(`
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] WHERE [Pagare] = @pagare)
         BEGIN
           UPDATE [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web]
@@ -36806,12 +36922,12 @@ var welcome_default = router16;
 
 // src/routes/productividadViva.ts
 var import_express17 = __toESM(require_express2(), 1);
-import sql12 from "mssql";
+import sql13 from "mssql";
 var router17 = (0, import_express17.Router)();
 router17.get(["/productividad-en-vivo", "/api/productividad-en-vivo"], async (req, res) => {
   const periodo = (req.query.periodo || "").trim();
   try {
-    const result = await pool.request().input("periodo", sql12.VarChar(6), periodo).query(`
+    const result = await pool.request().input("periodo", sql13.VarChar(6), periodo).query(`
         DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
         DECLARE @PeriodoDefault VARCHAR(6) = CASE WHEN @periodo <> '' THEN @periodo ELSE CONVERT(VARCHAR(6), @Hoy, 112) END;
 
