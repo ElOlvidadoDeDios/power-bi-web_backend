@@ -34394,7 +34394,6 @@ var dbConfig = {
     min: 2,
     idleTimeoutMillis: 3e4
   },
-  // 👈 ¡Aquí faltaba esta coma!
   options: {
     encrypt: false,
     trustServerCertificate: true
@@ -35910,8 +35909,8 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
   const page = Math.max(parseInt(req.query.page) || 1, 1);
   const limit = Math.max(parseInt(req.query.limit) || 100, 1);
   const offset = (page - 1) * limit;
-  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam;
-  const asesor = asesorParam === "Todos" ? "" : asesorParam;
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim();
+  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
   try {
     const request = pool.request();
     const filtroVistaSQL = vista === "comercial" ? `AND DA.Agencia IS NOT NULL AND DA.Agencia NOT IN ('Agencia Desconocida', 'NULL')` : `AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL'))`;
@@ -35932,11 +35931,17 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           COUNT(*) OVER() AS TotalRegistrosGlobal,
           AVG(CAST(ISNULL(A.[Avance Cartera], 0) AS FLOAT)) OVER() AS PromedioAvanceGlobal
       FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_asesor] D_AS WITH (NOLOCK)
-          ON A.IdSAsesor = D_AS.IdSAsesor 
-          AND D_AS.Periodo = CONVERT(VARCHAR(6), GETDATE(), 112)
+      OUTER APPLY (
+          SELECT TOP 1 
+              D.[IdSAgencia],
+              D.[Asesor],
+              D.[AsesorNombresApellidos]
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] D WITH (NOLOCK)
+          WHERE RTRIM(LTRIM(D.[IdSAsesor])) = RTRIM(LTRIM(A.[IdSAsesor]))
+          ORDER BY D.[Periodo] DESC
+      ) D_AS
       LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
-          ON D_AS.IdSAgencia = DA.IdSAgencia
+          ON RIGHT('00' + RTRIM(LTRIM(D_AS.IdSAgencia)), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
       WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
         AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
         ${filtroVistaSQL}

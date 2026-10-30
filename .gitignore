@@ -1,6 +1,9 @@
 # Dependencies
 node_modules
 
+# Carpetas
+dist/*
+lib/*
 
 # Build outputs
 dist-ssr
@@ -39,3 +42,4 @@ Thumbs.db
 
 readme.txt
 backend_completo,txt
+package-lock.json
