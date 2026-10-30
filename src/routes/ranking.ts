@@ -6,11 +6,12 @@ const router = Router();
 router.get(["/ranking", "/api/ranking"], async (_req: Request, res: Response) => {
   try {
     const request = pool.request();
-    
-    // Obtenemos los registros correspondientes a la ÚLTIMA FECHA CALCULADA con WITH (NOLOCK)
+
+    // La tabla ahora almacena una única fecha vigente; formateamos Fecha_Calculo
+    // con T12:00:00 para evitar que UTC-5 en el navegador reste 5 horas y muestre el día anterior
     const querySQL = `
       SELECT TOP (1000) 
-          [Fecha_Calculo],
+          CONVERT(VARCHAR(10), CAST([Fecha_Calculo] AS DATE), 23) + 'T12:00:00' AS [Fecha_Calculo],
           [IdSAsesor],
           [Asesor],
           [Agencia],
@@ -25,10 +26,6 @@ router.get(["/ranking", "/api/ranking"], async (_req: Request, res: Response) =>
           [Puesto_Anterior],
           [Comentario_Creativo]
       FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
-      WHERE CAST([Fecha_Calculo] AS DATE) = (
-          SELECT MAX(CAST([Fecha_Calculo] AS DATE)) 
-          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
-      )
       ORDER BY [Puesto_Actual] ASC;
     `;
 
