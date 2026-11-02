@@ -18,6 +18,7 @@ import moraRoutes from './mora';
 import pagosMoraRoutes from './pagosMora';
 import welcomeRoutes from './welcome';
 import productividadVivaRouter from './productividadViva';
+import balanceGerencialRoutes from "./balanceGerencial";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(moraRoutes);
 router.use(pagosMoraRoutes);
 router.use(welcomeRoutes);
 router.use(productividadVivaRouter);
+router.use(balanceGerencialRoutes);
 
 export default router;

@@ -21147,27 +21147,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router19;
+    module.exports = Router20;
     module.exports.Route = Route;
-    function Router19(options) {
-      if (!(this instanceof Router19)) {
-        return new Router19(options);
+    function Router20(options) {
+      if (!(this instanceof Router20)) {
+        return new Router20(options);
       }
       const opts = options || {};
-      function router19(req, res, next) {
-        router19.handle(req, res, next);
+      function router20(req, res, next) {
+        router20.handle(req, res, next);
       }
-      Object.setPrototypeOf(router19, this);
-      router19.caseSensitive = opts.caseSensitive;
-      router19.mergeParams = opts.mergeParams;
-      router19.params = {};
-      router19.strict = opts.strict;
-      router19.stack = [];
-      return router19;
+      Object.setPrototypeOf(router20, this);
+      router20.caseSensitive = opts.caseSensitive;
+      router20.mergeParams = opts.mergeParams;
+      router20.params = {};
+      router20.strict = opts.strict;
+      router20.stack = [];
+      return router20;
     }
-    Router19.prototype = function() {
+    Router20.prototype = function() {
     };
-    Router19.prototype.param = function param(name, fn) {
+    Router20.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -21187,7 +21187,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router19.prototype.handle = function handle(req, res, callback) {
+    Router20.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21314,7 +21314,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router19.prototype.use = function use(handler) {
+    Router20.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21347,7 +21347,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router19.prototype.route = function route(path) {
+    Router20.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21362,7 +21362,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router19.prototype[method] = function(path) {
+      Router20.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21545,13 +21545,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router19 = require_router();
+    var Router20 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router19 = null;
+      var router20 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21560,13 +21560,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router19 === null) {
-            router19 = new Router19({
+          if (router20 === null) {
+            router20 = new Router20({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router19;
+          return router20;
         }
       });
     };
@@ -21637,15 +21637,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router19 = this.router;
+      var router20 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router19.use(path, fn2);
+          return router20.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router19.use(path, function mounted_app(req, res, next) {
+        router20.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -24234,7 +24234,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router19 = require_router();
+    var Router20 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24256,8 +24256,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router19.Route;
-    exports.Router = Router19;
+    exports.Route = Router20.Route;
+    exports.Router = Router20;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28871,7 +28871,7 @@ var require_pino = __commonJS({
 var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
-var import_express19 = __toESM(require_express2(), 1);
+var import_express20 = __toESM(require_express2(), 1);
 
 // src/middlewares/errorHandler.ts
 var errorHandler = (err, req, res, next) => {
@@ -28902,7 +28902,7 @@ var errorHandler = (err, req, res, next) => {
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
-var import_express18 = __toESM(require_express2(), 1);
+var import_express19 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -35965,7 +35965,7 @@ router13.get(["/ranking", "/api/ranking"], async (_req, res) => {
     const request = pool.request();
     const querySQL = `
       SELECT TOP (1000) 
-          [Fecha_Calculo],
+          CONVERT(VARCHAR(10), CAST([Fecha_Calculo] AS DATE), 23) + 'T12:00:00' AS [Fecha_Calculo],
           [IdSAsesor],
           [Asesor],
           [Agencia],
@@ -35980,10 +35980,6 @@ router13.get(["/ranking", "/api/ranking"], async (_req, res) => {
           [Puesto_Anterior],
           [Comentario_Creativo]
       FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
-      WHERE CAST([Fecha_Calculo] AS DATE) = (
-          SELECT MAX(CAST([Fecha_Calculo] AS DATE)) 
-          FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
-      )
       ORDER BY [Puesto_Actual] ASC;
     `;
     const result = await request.query(querySQL);
@@ -37010,32 +37006,833 @@ router17.get(["/productividad-en-vivo", "/api/productividad-en-vivo"], async (re
 });
 var productividadViva_default = router17;
 
-// src/routes/index.ts
+// src/routes/balanceGerencial.ts
+var import_express18 = __toESM(require_express2(), 1);
+import sql14 from "mssql";
 var router18 = (0, import_express18.Router)();
-router18.use(health_default);
-router18.use(preventiva_default);
-router18.use(filtros_default);
-router18.use(calendario_default);
-router18.use(gerencia_default);
-router18.use(supervision_default);
-router18.use(agencia_default);
-router18.use(asesores_default);
-router18.use(diaria_default);
-router18.use(evolucion_default);
-router18.use(cancelados_default);
-router18.use(avance_default);
-router18.use(ranking_default);
-router18.use(mora_default);
-router18.use(pagosMora_default);
-router18.use(welcome_default);
-router18.use(productividadViva_default);
-var routes_default = router18;
+var AGENCY_NAMES = {
+  "01": "Wanchaq",
+  "02": "San Jer\xF3nimo",
+  "03": "Quillabamba",
+  "04": "Sicuani",
+  "05": "Molino",
+  "06": "Juliaca",
+  "07": "Lima Los Olivos",
+  "08": "Tica Tica",
+  "09": "Magisterio",
+  "10": "Lima SJL",
+  "11": "Chiclayo",
+  "12": "Arequipa",
+  "13": "Pucallpa",
+  "98": "Agencia Digital (98)"
+};
+router18.get(
+  ["/balance-gerencial", "/api/balance-gerencial"],
+  async (req, res) => {
+    try {
+      const separar98 = String(req.query.separar98 || "false") === "true";
+      const incluirTodoPreec = String(req.query.incluirTodoPreec || "true") === "true";
+      const granularidad = String(req.query.granularidad || "Mensual") === "Diario" ? "Diario" : "Mensual";
+      const agenciaFiltro = String(req.query.agencia || "Todas").trim();
+      const asesorFiltro = String(req.query.asesor || "Todos").trim();
+      const fechaFiltro = String(req.query.fecha || "CIERRE").trim();
+      const rawMoneda = String(req.query.moneda || "MN").toUpperCase().trim();
+      const monedaFiltro = rawMoneda === "ME" || rawMoneda === "CONSOLIDADO" ? rawMoneda : "MN";
+      const resPeriodos = await pool.request().query(`
+        SELECT DISTINCT [Periodo]
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
+        WHERE [Periodo] IS NOT NULL
+        ORDER BY [Periodo] DESC;
+      `);
+      const listaPeriodos = resPeriodos.recordset.map(
+        (r) => String(r.Periodo).trim()
+      );
+      const d = /* @__PURE__ */ new Date();
+      const periodoDefault = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const periodo = String(req.query.periodo || listaPeriodos[0] || periodoDefault).trim();
+      const reqFechas = pool.request();
+      reqFechas.input("periodo", sql14.VarChar(6), periodo);
+      const resFechas = await reqFechas.query(`
+        SELECT DISTINCT CONVERT(VARCHAR(10), [Fecha], 23) AS Fecha
+        FROM (
+          SELECT [Fecha_Mov] AS Fecha FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK) WHERE [Periodo] = @periodo
+          UNION
+          SELECT [Fecha_Mov] AS Fecha FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_caja_020] WITH (NOLOCK) WHERE [Periodo] = @periodo
+          UNION
+          SELECT [Fecha_Corte] AS Fecha FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK) WHERE [Periodo] = @periodo
+        ) F
+        WHERE [Fecha] IS NOT NULL
+        ORDER BY Fecha DESC;
+      `);
+      const fechasDisponibles = resFechas.recordset.map((r) => r.Fecha);
+      const colAgencia = separar98 ? "[IdSAgencia_Separada]" : "[IdSAgencia_Origen]";
+      const tieneFechaExacta = fechaFiltro !== "CIERRE" && fechaFiltro !== "" && fechaFiltro !== "Todas";
+      let codAgenciaFiltro = "";
+      if (agenciaFiltro !== "Todas" && agenciaFiltro !== "") {
+        const foundEntry = Object.entries(AGENCY_NAMES).find(
+          ([code, name]) => code === agenciaFiltro || name.toLowerCase() === agenciaFiltro.toLowerCase()
+        );
+        codAgenciaFiltro = foundEntry ? foundEntry[0] : agenciaFiltro;
+      }
+      const reqAho = pool.request();
+      reqAho.input("periodo", sql14.VarChar(6), periodo);
+      reqAho.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+      reqAho.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+      reqAho.input("asesor", sql14.VarChar(50), asesorFiltro === "Todos" ? "" : asesorFiltro);
+      reqAho.input("moneda", sql14.VarChar(15), monedaFiltro);
+      const queryAhoStock = `
+        DECLARE @FechaStock DATE;
+        IF @fecha <> '' AND EXISTS (
+          SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo AND [Fecha_Corte] = CAST(@fecha AS DATE)
+        )
+          SET @FechaStock = CAST(@fecha AS DATE);
+        ELSE
+          SELECT @FechaStock = MAX([Fecha_Corte])
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo;
+
+        SELECT
+          ${colAgencia} AS IdSAgencia,
+          [IdSAsesor],
+          MAX([Nombre_Usuario]) AS Nombre_Usuario,
+          [Tipo_Aho],
+          [Subtipo_Aho],
+          MAX([Nombre_Producto]) AS Nombre_Producto,
+          [Moneda],
+          MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
+          SUM([Nro_Cuentas]) AS Nro_Cuentas,
+          SUM([Saldo_Total]) AS Saldo_Original,
+          SUM([Numerador_Saldo_x_TEA]) AS Numerador_TEA_Original
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@FechaStock IS NULL OR [Fecha_Corte] = @FechaStock)
+          AND (@agencia = '' OR ${colAgencia} = @agencia)
+          AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
+          AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+      `;
+      const reqFlujo = pool.request();
+      reqFlujo.input("periodo", sql14.VarChar(6), periodo);
+      reqFlujo.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+      reqFlujo.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+      reqFlujo.input("asesor", sql14.VarChar(50), asesorFiltro === "Todos" ? "" : asesorFiltro);
+      reqFlujo.input("moneda", sql14.VarChar(15), monedaFiltro);
+      const queryAhoFlujo = `
+        SELECT
+          ${colAgencia} AS IdSAgencia,
+          [IdSAsesor],
+          MAX([Nombre_Usuario]) AS Nombre_Usuario,
+          [Tipo_Aho],
+          [Subtipo_Aho],
+          MAX([Nombre_Producto]) AS Nombre_Producto,
+          [Moneda],
+          MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
+          SUM([Monto_Depositos]) AS Monto_Depositos,
+          SUM([Monto_Retiros]) AS Monto_Retiros,
+          SUM([Nro_Depositos]) AS Nro_Depositos,
+          SUM([Nro_Retiros]) AS Nro_Retiros
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@fecha = '' OR [Fecha_Mov] = CAST(@fecha AS DATE))
+          AND (@agencia = '' OR ${colAgencia} = @agencia)
+          AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
+          AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+      `;
+      const reqColoc = pool.request();
+      reqColoc.input("periodo", sql14.VarChar(6), periodo);
+      reqColoc.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+      reqColoc.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+      reqColoc.input("asesor", sql14.VarChar(50), asesorFiltro === "Todos" ? "" : asesorFiltro);
+      reqColoc.input("todoPreec", sql14.Bit, incluirTodoPreec ? 1 : 0);
+      const queryColoc = `
+        DECLARE @FechaColoc DATE;
+        IF @fecha <> '' AND EXISTS (
+          SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE)
+        )
+          SELECT @FechaColoc = MAX([Fecha_Corte])
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE);
+        ELSE
+          SELECT @FechaColoc = MAX([Fecha_Corte])
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo;
+
+        SELECT
+          ${colAgencia} AS IdSAgencia,
+          [IdSAsesor],
+          MAX([Nombre_Asesor]) AS Nombre_Asesor,
+          SUM([Nro_Creditos]) AS Nro_Creditos,
+          SUM([Saldo_Colocaciones]) AS Saldo_Colocaciones,
+          SUM([Numerador_Saldo_x_TEA]) AS Numerador_TEA
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@FechaColoc IS NULL OR [Fecha_Corte] = @FechaColoc)
+          AND (@todoPreec = 1 OR [Es_Cartera_Comercial] = 1)
+          AND (@agencia = '' OR ${colAgencia} = @agencia)
+          AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Asesor] = @asesor)
+        GROUP BY ${colAgencia}, [IdSAsesor];
+      `;
+      const reqCaja = pool.request();
+      reqCaja.input("periodo", sql14.VarChar(6), periodo);
+      reqCaja.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+      reqCaja.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+      const queryCaja = `
+        DECLARE @FechaCaja DATE;
+        IF @fecha <> ''
+          SELECT @FechaCaja = MAX([Fecha_Mov])
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_caja_020] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo AND [Fecha_Mov] <= CAST(@fecha AS DATE);
+
+        SELECT
+          [IdSAgencia_Origen] AS IdSAgencia,
+          SUM([Saldo_Inicial_MN]) AS Saldo_Inicial_MN,
+          SUM([Total_Ingresos_MN]) AS Total_Ingresos_MN,
+          SUM([Total_Egresos_MN]) AS Total_Egresos_MN,
+          SUM([Saldo_Cierre_MN]) AS Saldo_Cierre_MN,
+          SUM([Saldo_Cierre_ME]) AS Saldo_Cierre_ME
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_caja_020] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (
+            (@fecha = '' AND [Es_Ultimo_Cierre_Periodo] = 1)
+            OR (@fecha <> '' AND [Fecha_Mov] = @FechaCaja)
+          )
+          AND (@agencia = '' OR [IdSAgencia_Origen] = @agencia)
+        GROUP BY [IdSAgencia_Origen];
+      `;
+      const reqBancos = pool.request();
+      reqBancos.input("periodo", sql14.VarChar(6), periodo);
+      reqBancos.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+      reqBancos.input("moneda", sql14.VarChar(15), monedaFiltro);
+      const queryBancos = `
+        SELECT
+          [Id],
+          [Periodo],
+          CONVERT(VARCHAR(10), [Fecha_Corte], 23) + 'T12:00:00' AS Fecha_Corte,
+          [Entidad_Bancaria],
+          [Moneda],
+          [Saldo_Banco],
+          ISNULL([TEA_Pasiva_Banco], 0) AS TEA_Pasiva_Banco,
+          [Observacion],
+          [Usuario_Registro]
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@fecha = '' OR [Fecha_Corte] <= CAST(@fecha AS DATE))
+          AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+        ORDER BY [Fecha_Corte] DESC, [Id] DESC;
+      `;
+      const reqEvo = pool.request();
+      reqEvo.input("periodo", sql14.VarChar(6), periodo);
+      reqEvo.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+      reqEvo.input("todoPreec", sql14.Bit, incluirTodoPreec ? 1 : 0);
+      reqEvo.input("moneda", sql14.VarChar(15), monedaFiltro);
+      const exprFactorTC = `CASE WHEN [Moneda] = 'ME' THEN ISNULL([Tipo_Cambio], 3.75) ELSE 1.0 END`;
+      const queryEvolutivo = granularidad === "Mensual" ? `
+        WITH ColocMes AS (
+          SELECT
+            C.[Periodo] AS Etiqueta,
+            SUM(C.[Saldo_Colocaciones]) AS Saldo_Colocaciones,
+            SUM(C.[Numerador_Saldo_x_TEA]) / NULLIF(SUM(C.[Saldo_Colocaciones]), 0) AS TEA_Activa
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] C WITH (NOLOCK)
+          INNER JOIN (
+            SELECT [Periodo], MAX([Fecha_Corte]) AS MaxFecha
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones] WITH (NOLOCK)
+            GROUP BY [Periodo]
+          ) M ON C.[Periodo] = M.[Periodo] AND C.[Fecha_Corte] = M.MaxFecha
+          WHERE (@todoPreec = 1 OR C.[Es_Cartera_Comercial] = 1)
+            AND (@agencia = '' OR C.${colAgencia} = @agencia)
+          GROUP BY C.[Periodo]
+        ),
+        AhoMes AS (
+          SELECT
+            S.[Periodo] AS Etiqueta,
+            SUM(CASE WHEN S.[Tipo_Aho] <> '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Ahorros,
+            SUM(CASE WHEN S.[Tipo_Aho] = '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Plazo_Fijo,
+            SUM(S.[Numerador_Saldo_x_TEA] * (${exprFactorTC})) / NULLIF(SUM(S.[Saldo_Total] * (${exprFactorTC})), 0) AS TEA_Pasiva
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] S WITH (NOLOCK)
+          WHERE S.[Es_Foto_Actual] = 1
+            AND (@agencia = '' OR S.${colAgencia} = @agencia)
+            AND (@moneda = 'CONSOLIDADO' OR S.[Moneda] = @moneda)
+          GROUP BY S.[Periodo]
+        ),
+        FlujoMes AS (
+          SELECT
+            [Periodo] AS Etiqueta,
+            SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
+            SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
+          WHERE (@agencia = '' OR ${colAgencia} = @agencia)
+            AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+          GROUP BY [Periodo]
+        ),
+        CajaMes AS (
+          SELECT
+            [Periodo] AS Etiqueta,
+            SUM([Saldo_Cierre_MN]) AS Saldo_Caja_020
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_caja_020] WITH (NOLOCK)
+          WHERE [Es_Ultimo_Cierre_Periodo] = 1
+            AND (@agencia = '' OR [IdSAgencia_Origen] = @agencia)
+          GROUP BY [Periodo]
+        ),
+        BancosMes AS (
+          SELECT
+            [Periodo] AS Etiqueta,
+            SUM([Saldo_Banco]) AS Saldo_Bancos
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual] WITH (NOLOCK)
+          WHERE (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+          GROUP BY [Periodo]
+        ),
+        PeriodosBase AS (
+          SELECT Etiqueta FROM AhoMes
+          UNION SELECT Etiqueta FROM ColocMes
+        )
+        SELECT TOP 12
+          P.Etiqueta AS etiqueta,
+          ISNULL(A.Saldo_Ahorros, 0) AS saldoAhorros,
+          ISNULL(A.Saldo_Plazo_Fijo, 0) AS saldoPlazoFijo,
+          ISNULL(C.Saldo_Colocaciones, 0) AS saldoColocaciones,
+          ISNULL(CJ.Saldo_Caja_020, 0) AS saldoCaja020,
+          ISNULL(B.Saldo_Bancos, 0) AS saldoBancos,
+          ISNULL(F.Depositos, 0) AS depositos,
+          ISNULL(F.Retiros, 0) AS retiros,
+          ISNULL(C.TEA_Activa, 0) AS teaActiva,
+          ISNULL(A.TEA_Pasiva, 0) AS teaPasiva
+        FROM PeriodosBase P
+        LEFT JOIN ColocMes C ON P.Etiqueta = C.Etiqueta
+        LEFT JOIN AhoMes A ON P.Etiqueta = A.Etiqueta
+        LEFT JOIN FlujoMes F ON P.Etiqueta = F.Etiqueta
+        LEFT JOIN CajaMes CJ ON P.Etiqueta = CJ.Etiqueta
+        LEFT JOIN BancosMes B ON P.Etiqueta = B.Etiqueta
+        ORDER BY P.Etiqueta ASC;
+      ` : `
+        WITH FlujoAhoDia AS (
+          SELECT
+            CONVERT(VARCHAR(10), [Fecha_Mov], 23) AS Etiqueta,
+            SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
+            SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros,
+            SUM(CASE WHEN [Tipo_Aho] <> '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_Ahorros,
+            SUM(CASE WHEN [Tipo_Aho] = '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_PF
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo
+            AND (@agencia = '' OR ${colAgencia} = @agencia)
+            AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
+          GROUP BY CONVERT(VARCHAR(10), [Fecha_Mov], 23)
+        ),
+        FlujoColocDia AS (
+          SELECT
+            CONVERT(VARCHAR(10), [Fecha_Mov], 23) AS Etiqueta,
+            SUM(ISNULL([Monto_Desembolsos], 0) - ISNULL([Monto_Repagos], 0)) AS Delta_Colocaciones
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_flujo] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo
+            AND (@agencia = '' OR ${colAgencia} = @agencia)
+            AND (@todoPreec = 1 OR [Es_Cartera_Comercial] = 1)
+          GROUP BY CONVERT(VARCHAR(10), [Fecha_Mov], 23)
+        ),
+        CajaDia AS (
+          SELECT
+            CONVERT(VARCHAR(10), [Fecha_Mov], 23) AS Etiqueta,
+            SUM([Saldo_Cierre_MN]) AS Saldo_Caja_020
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_caja_020] WITH (NOLOCK)
+          WHERE [Periodo] = @periodo
+            AND (@agencia = '' OR [IdSAgencia_Origen] = @agencia)
+          GROUP BY CONVERT(VARCHAR(10), [Fecha_Mov], 23)
+        ),
+        FechasBase AS (
+          SELECT Etiqueta FROM FlujoAhoDia
+          UNION SELECT Etiqueta FROM FlujoColocDia
+          UNION SELECT Etiqueta FROM CajaDia
+        )
+        SELECT
+          F.Etiqueta AS etiqueta,
+          ISNULL(FA.Depositos, 0) AS depositos,
+          ISNULL(FA.Retiros, 0) AS retiros,
+          ISNULL(FA.Delta_Ahorros, 0) AS deltaAhorros,
+          ISNULL(FA.Delta_PF, 0) AS deltaPF,
+          ISNULL(FC.Delta_Colocaciones, 0) AS deltaColocaciones,
+          ISNULL(CJ.Saldo_Caja_020, 0) AS saldoCaja020
+        FROM FechasBase F
+        LEFT JOIN FlujoAhoDia FA ON F.Etiqueta = FA.Etiqueta
+        LEFT JOIN FlujoColocDia FC ON F.Etiqueta = FC.Etiqueta
+        LEFT JOIN CajaDia CJ ON F.Etiqueta = CJ.Etiqueta
+        ORDER BY F.Etiqueta ASC;
+      `;
+      const [resAho, resFlujo, resColoc, resCaja, resBancos, resEvo] = await Promise.all([
+        reqAho.query(queryAhoStock),
+        reqFlujo.query(queryAhoFlujo),
+        reqColoc.query(queryColoc),
+        reqCaja.query(queryCaja),
+        reqBancos.query(queryBancos),
+        reqEvo.query(queryEvolutivo)
+      ]);
+      const ahoRows = resAho.recordset || [];
+      const flujoRows = resFlujo.recordset || [];
+      const colocRows = resColoc.recordset || [];
+      const cajaRows = resCaja.recordset || [];
+      const bancosRows = resBancos.recordset || [];
+      const evoRows = resEvo.recordset || [];
+      let tipoCambioPeriodo = 3.75;
+      for (const r of ahoRows) {
+        if (String(r.Moneda).trim() === "ME" && Number(r.Tipo_Cambio) > 1) {
+          tipoCambioPeriodo = Number(r.Tipo_Cambio);
+          break;
+        }
+      }
+      const agenciaMap = /* @__PURE__ */ new Map();
+      const asesorMap = /* @__PURE__ */ new Map();
+      const productoMap = /* @__PURE__ */ new Map();
+      const ensureAgencia = (cod) => {
+        const cleanCod = String(cod || "01").trim().padStart(2, "0");
+        if (!agenciaMap.has(cleanCod)) {
+          agenciaMap.set(cleanCod, {
+            idAgencia: cleanCod,
+            agencia: AGENCY_NAMES[cleanCod] || `Agencia ${cleanCod}`,
+            saldoAhorros: 0,
+            saldoAhorrosUSD: 0,
+            saldoAhorrosUSD_Soles: 0,
+            numTeaAhorros: 0,
+            saldoPlazoFijo: 0,
+            saldoPlazoFijoUSD: 0,
+            saldoPlazoFijoUSD_Soles: 0,
+            numTeaPlazoFijo: 0,
+            depositos: 0,
+            depositosUSD: 0,
+            retiros: 0,
+            retirosUSD: 0,
+            saldoColocaciones: 0,
+            numTeaColocaciones: 0,
+            nroCreditos: 0,
+            saldoCaja020: 0,
+            saldoCaja020USD: 0
+          });
+        }
+        return agenciaMap.get(cleanCod);
+      };
+      const ensureAsesor = (idAsesor, nombre, codAgencia) => {
+        const key = String(idAsesor || "SISTEMA").trim();
+        const cleanCod = String(codAgencia || "01").trim().padStart(2, "0");
+        if (!asesorMap.has(key)) {
+          asesorMap.set(key, {
+            idAsesor: key,
+            nombre: String(nombre || key).trim(),
+            idAgencia: cleanCod,
+            agencia: AGENCY_NAMES[cleanCod] || `Agencia ${cleanCod}`,
+            saldoAhorros: 0,
+            saldoAhorrosUSD: 0,
+            saldoAhorrosUSD_Soles: 0,
+            numTeaAhorros: 0,
+            saldoPlazoFijo: 0,
+            saldoPlazoFijoUSD: 0,
+            saldoPlazoFijoUSD_Soles: 0,
+            numTeaPlazoFijo: 0,
+            depositos: 0,
+            retiros: 0,
+            saldoColocaciones: 0,
+            numTeaColocaciones: 0,
+            nroCreditos: 0
+          });
+        }
+        return asesorMap.get(key);
+      };
+      let kpiSaldoAhorrosSoles = 0;
+      let kpiSaldoAhorrosUSD = 0;
+      let kpiSaldoAhorrosUSD_EnSoles = 0;
+      let kpiNumTeaAhorros = 0;
+      let kpiSaldoPFSoles = 0;
+      let kpiSaldoPFUSD = 0;
+      let kpiSaldoPFUSD_EnSoles = 0;
+      let kpiNumTeaPF = 0;
+      ahoRows.forEach((r) => {
+        const esME = String(r.Moneda).trim() === "ME";
+        const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1;
+        const saldoOrig = Number(r.Saldo_Original || 0);
+        const saldoEnSoles = esME ? saldoOrig * tc : saldoOrig;
+        const numTeaEnSoles = Number(r.Numerador_TEA_Original || 0) * tc;
+        const esPF = String(r.Tipo_Aho).trim() === "03";
+        const ag = ensureAgencia(r.IdSAgencia);
+        const as = ensureAsesor(r.IdSAsesor, r.Nombre_Usuario, r.IdSAgencia);
+        if (esPF) {
+          kpiSaldoPFSoles += saldoEnSoles;
+          kpiNumTeaPF += numTeaEnSoles;
+          ag.saldoPlazoFijo += saldoEnSoles;
+          ag.numTeaPlazoFijo += numTeaEnSoles;
+          as.saldoPlazoFijo += saldoEnSoles;
+          as.numTeaPlazoFijo += numTeaEnSoles;
+          if (esME) {
+            kpiSaldoPFUSD += saldoOrig;
+            kpiSaldoPFUSD_EnSoles += saldoEnSoles;
+            ag.saldoPlazoFijoUSD += saldoOrig;
+            ag.saldoPlazoFijoUSD_Soles += saldoEnSoles;
+            as.saldoPlazoFijoUSD += saldoOrig;
+            as.saldoPlazoFijoUSD_Soles += saldoEnSoles;
+          }
+        } else {
+          kpiSaldoAhorrosSoles += saldoEnSoles;
+          kpiNumTeaAhorros += numTeaEnSoles;
+          ag.saldoAhorros += saldoEnSoles;
+          ag.numTeaAhorros += numTeaEnSoles;
+          as.saldoAhorros += saldoEnSoles;
+          as.numTeaAhorros += numTeaEnSoles;
+          if (esME) {
+            kpiSaldoAhorrosUSD += saldoOrig;
+            kpiSaldoAhorrosUSD_EnSoles += saldoEnSoles;
+            ag.saldoAhorrosUSD += saldoOrig;
+            ag.saldoAhorrosUSD_Soles += saldoEnSoles;
+            as.saldoAhorrosUSD += saldoOrig;
+            as.saldoAhorrosUSD_Soles += saldoEnSoles;
+          }
+        }
+        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
+        if (!productoMap.has(prodKey)) {
+          productoMap.set(prodKey, {
+            codigo: prodKey,
+            tipoAho: r.Tipo_Aho,
+            subtipoAho: r.Subtipo_Aho,
+            producto: r.Nombre_Producto,
+            moneda: r.Moneda,
+            tipoCambio: Number(tc.toFixed(4)),
+            nroCuentas: 0,
+            saldoOriginal: 0,
+            saldoTotal: 0,
+            numTea: 0,
+            depositosOriginal: 0,
+            depositos: 0,
+            retirosOriginal: 0,
+            retiros: 0
+          });
+        }
+        const prod = productoMap.get(prodKey);
+        prod.nroCuentas += Number(r.Nro_Cuentas || 0);
+        prod.saldoOriginal += saldoOrig;
+        prod.saldoTotal += saldoEnSoles;
+        prod.numTea += numTeaEnSoles;
+      });
+      let kpiDepositosSoles = 0;
+      let kpiDepositosUSD = 0;
+      let kpiRetirosSoles = 0;
+      let kpiRetirosUSD = 0;
+      flujoRows.forEach((r) => {
+        const esME = String(r.Moneda).trim() === "ME";
+        const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1;
+        const depOrig = Number(r.Monto_Depositos || 0);
+        const retOrig = Number(r.Monto_Retiros || 0);
+        const depSoles = esME ? depOrig * tc : depOrig;
+        const retSoles = esME ? retOrig * tc : retOrig;
+        kpiDepositosSoles += depSoles;
+        kpiRetirosSoles += retSoles;
+        if (esME) {
+          kpiDepositosUSD += depOrig;
+          kpiRetirosUSD += retOrig;
+        }
+        const ag = ensureAgencia(r.IdSAgencia);
+        ag.depositos += depSoles;
+        ag.retiros += retSoles;
+        if (esME) {
+          ag.depositosUSD += depOrig;
+          ag.retirosUSD += retOrig;
+        }
+        const as = ensureAsesor(r.IdSAsesor, r.Nombre_Usuario, r.IdSAgencia);
+        as.depositos += depSoles;
+        as.retiros += retSoles;
+        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
+        if (productoMap.has(prodKey)) {
+          const prod = productoMap.get(prodKey);
+          prod.depositosOriginal += depOrig;
+          prod.depositos += depSoles;
+          prod.retirosOriginal += retOrig;
+          prod.retiros += retSoles;
+        }
+      });
+      let kpiSaldoColoc = 0;
+      let kpiNumTeaColoc = 0;
+      let kpiNroCreditos = 0;
+      colocRows.forEach((r) => {
+        const saldo = Number(r.Saldo_Colocaciones || 0);
+        const numTea = Number(r.Numerador_TEA || 0);
+        const creds = Number(r.Nro_Creditos || 0);
+        kpiSaldoColoc += saldo;
+        kpiNumTeaColoc += numTea;
+        kpiNroCreditos += creds;
+        const ag = ensureAgencia(r.IdSAgencia);
+        ag.saldoColocaciones += saldo;
+        ag.numTeaColocaciones += numTea;
+        ag.nroCreditos += creds;
+        const as = ensureAsesor(r.IdSAsesor, r.Nombre_Asesor, r.IdSAgencia);
+        as.saldoColocaciones += saldo;
+        as.numTeaColocaciones += numTea;
+        as.nroCreditos += creds;
+      });
+      let kpiSaldoCaja020 = 0;
+      let kpiSaldoCaja020USD = 0;
+      let kpiSaldoCaja020USD_EnSoles = 0;
+      cajaRows.forEach((r) => {
+        const cierreMN = Number(r.Saldo_Cierre_MN || 0);
+        const cierreME = Number(r.Saldo_Cierre_ME || 0);
+        const cierreME_Soles = cierreME * tipoCambioPeriodo;
+        const ag = ensureAgencia(r.IdSAgencia);
+        ag.saldoCaja020USD += cierreME;
+        if (monedaFiltro === "ME") {
+          kpiSaldoCaja020 += cierreME_Soles;
+          kpiSaldoCaja020USD += cierreME;
+          kpiSaldoCaja020USD_EnSoles += cierreME_Soles;
+          ag.saldoCaja020 += cierreME_Soles;
+        } else if (monedaFiltro === "CONSOLIDADO") {
+          kpiSaldoCaja020 += cierreMN + cierreME_Soles;
+          kpiSaldoCaja020USD += cierreME;
+          kpiSaldoCaja020USD_EnSoles += cierreME_Soles;
+          ag.saldoCaja020 += cierreMN + cierreME_Soles;
+        } else {
+          kpiSaldoCaja020 += cierreMN;
+          ag.saldoCaja020 += cierreMN;
+        }
+      });
+      let kpiSaldoBancos = 0;
+      let kpiSaldoBancosUSD = 0;
+      bancosRows.forEach((b) => {
+        const esME = String(b.Moneda).trim() === "ME";
+        const monto = Number(b.Saldo_Banco || 0);
+        if (esME) {
+          kpiSaldoBancosUSD += monto;
+          kpiSaldoBancos += monto * tipoCambioPeriodo;
+        } else {
+          kpiSaldoBancos += monto;
+        }
+      });
+      const teaPasivaAhorros = kpiSaldoAhorrosSoles > 0 ? kpiNumTeaAhorros / kpiSaldoAhorrosSoles : 0;
+      const teaPasivaPlazoFijo = kpiSaldoPFSoles > 0 ? kpiNumTeaPF / kpiSaldoPFSoles : 0;
+      const saldoCaptacionesTotal = kpiSaldoAhorrosSoles + kpiSaldoPFSoles;
+      const teaPasivaGlobal = saldoCaptacionesTotal > 0 ? (kpiNumTeaAhorros + kpiNumTeaPF) / saldoCaptacionesTotal : 0;
+      const teaActivaPonderada = kpiSaldoColoc > 0 ? kpiNumTeaColoc / kpiSaldoColoc : 0;
+      const spreadFinanciero = teaActivaPonderada - teaPasivaGlobal;
+      const porAgencia = Array.from(agenciaMap.values()).map((a) => {
+        const totalCap = a.saldoAhorros + a.saldoPlazoFijo;
+        const teaAho = a.saldoAhorros > 0 ? a.numTeaAhorros / a.saldoAhorros : 0;
+        const teaPF = a.saldoPlazoFijo > 0 ? a.numTeaPlazoFijo / a.saldoPlazoFijo : 0;
+        const teaPasiva = totalCap > 0 ? (a.numTeaAhorros + a.numTeaPlazoFijo) / totalCap : 0;
+        const teaActiva = a.saldoColocaciones > 0 ? a.numTeaColocaciones / a.saldoColocaciones : 0;
+        return {
+          ...a,
+          totalCaptaciones: totalCap,
+          teaAhorros: Number(teaAho.toFixed(2)),
+          teaPlazoFijo: Number(teaPF.toFixed(2)),
+          teaPasivaTotal: Number(teaPasiva.toFixed(2)),
+          teaActiva: Number(teaActiva.toFixed(2)),
+          spread: Number((teaActiva - teaPasiva).toFixed(2))
+        };
+      }).sort((a, b) => a.idAgencia.localeCompare(b.idAgencia));
+      const porAsesor = Array.from(asesorMap.values()).map((as) => {
+        const totalCap = as.saldoAhorros + as.saldoPlazoFijo;
+        const teaAho = as.saldoAhorros > 0 ? as.numTeaAhorros / as.saldoAhorros : 0;
+        const teaPF = as.saldoPlazoFijo > 0 ? as.numTeaPlazoFijo / as.saldoPlazoFijo : 0;
+        const teaPasiva = totalCap > 0 ? (as.numTeaAhorros + as.numTeaPlazoFijo) / totalCap : 0;
+        const teaActiva = as.saldoColocaciones > 0 ? as.numTeaColocaciones / as.saldoColocaciones : 0;
+        return {
+          ...as,
+          totalCaptaciones: totalCap,
+          teaAhorros: Number(teaAho.toFixed(2)),
+          teaPlazoFijo: Number(teaPF.toFixed(2)),
+          teaPasivaTotal: Number(teaPasiva.toFixed(2)),
+          teaActiva: Number(teaActiva.toFixed(2))
+        };
+      }).sort(
+        (a, b) => b.saldoColocaciones + b.totalCaptaciones - (a.saldoColocaciones + a.totalCaptaciones)
+      );
+      const porProductoAhorro = Array.from(productoMap.values()).map((p) => ({
+        ...p,
+        teaPonderada: Number(
+          (p.saldoTotal > 0 ? p.numTea / p.saldoTotal : 0).toFixed(2)
+        ),
+        flujoNeto: p.depositos - p.retiros
+      })).sort((a, b) => b.saldoTotal - a.saldoTotal);
+      let serieEvolutivaFinal = [];
+      if (granularidad === "Diario" && evoRows.length > 0) {
+        let runningAho = kpiSaldoAhorrosSoles;
+        let runningPF = kpiSaldoPFSoles;
+        let runningColoc = kpiSaldoColoc;
+        let lastValidCaja = kpiSaldoCaja020;
+        const reversed = [...evoRows].reverse();
+        const reconstructedReversed = reversed.map((dia) => {
+          const cajaDia = Number(dia.saldoCaja020 || 0);
+          if (cajaDia > 0) {
+            lastValidCaja = cajaDia;
+          }
+          const item = {
+            etiqueta: dia.etiqueta,
+            saldoAhorros: Math.max(0, Number(runningAho.toFixed(2))),
+            saldoPlazoFijo: Math.max(0, Number(runningPF.toFixed(2))),
+            saldoColocaciones: Math.max(0, Number(runningColoc.toFixed(2))),
+            saldoCaja020: cajaDia > 0 ? cajaDia : lastValidCaja,
+            saldoBancos: kpiSaldoBancos,
+            depositos: Number(dia.depositos || 0),
+            retiros: Number(dia.retiros || 0),
+            teaActiva: Number(teaActivaPonderada.toFixed(2)),
+            teaPasiva: Number(teaPasivaGlobal.toFixed(2)),
+            spread: Number(spreadFinanciero.toFixed(2))
+          };
+          runningAho -= Number(dia.deltaAhorros || 0);
+          runningPF -= Number(dia.deltaPF || 0);
+          runningColoc -= Number(dia.deltaColocaciones || 0);
+          return item;
+        });
+        serieEvolutivaFinal = reconstructedReversed.reverse();
+      } else {
+        serieEvolutivaFinal = evoRows.map((e) => ({
+          etiqueta: e.etiqueta,
+          saldoAhorros: Number(e.saldoAhorros || 0),
+          saldoPlazoFijo: Number(e.saldoPlazoFijo || 0),
+          saldoColocaciones: Number(e.saldoColocaciones || 0),
+          saldoCaja020: Number(e.saldoCaja020 || 0),
+          saldoBancos: Number(e.saldoBancos || 0),
+          depositos: Number(e.depositos || 0),
+          retiros: Number(e.retiros || 0),
+          teaActiva: Number(Number(e.teaActiva || 0).toFixed(2)),
+          teaPasiva: Number(Number(e.teaPasiva || 0).toFixed(2)),
+          spread: Number(
+            (Number(e.teaActiva || 0) - Number(e.teaPasiva || 0)).toFixed(2)
+          )
+        }));
+      }
+      res.json({
+        periodoActual: periodo,
+        monedaActual: monedaFiltro,
+        tipoCambio: Number(tipoCambioPeriodo.toFixed(4)),
+        filtros: {
+          periodos: listaPeriodos.length > 0 ? listaPeriodos : [periodoDefault],
+          fechasDisponibles,
+          asesores: porAsesor.map((a) => ({
+            id: a.idAsesor,
+            nombre: a.nombre,
+            agencia: a.agencia
+          }))
+        },
+        kpis: {
+          tipoCambio: Number(tipoCambioPeriodo.toFixed(4)),
+          saldoAhorros: kpiSaldoAhorrosSoles,
+          saldoAhorrosUSD: kpiSaldoAhorrosUSD,
+          saldoAhorrosUSD_EnSoles: kpiSaldoAhorrosUSD_EnSoles,
+          teaPasivaAhorros: Number(teaPasivaAhorros.toFixed(2)),
+          saldoPlazoFijo: kpiSaldoPFSoles,
+          saldoPlazoFijoUSD: kpiSaldoPFUSD,
+          saldoPlazoFijoUSD_EnSoles: kpiSaldoPFUSD_EnSoles,
+          teaPasivaPlazoFijo: Number(teaPasivaPlazoFijo.toFixed(2)),
+          saldoCaptacionesTotal,
+          saldoCaptacionesUSD: kpiSaldoAhorrosUSD + kpiSaldoPFUSD,
+          teaPasivaGlobal: Number(teaPasivaGlobal.toFixed(2)),
+          depositosFecha: kpiDepositosSoles,
+          depositosFechaUSD: kpiDepositosUSD,
+          retirosFecha: kpiRetirosSoles,
+          retirosFechaUSD: kpiRetirosUSD,
+          flujoNetoAhorros: kpiDepositosSoles - kpiRetirosSoles,
+          flujoNetoAhorrosUSD: kpiDepositosUSD - kpiRetirosUSD,
+          saldoColocaciones: kpiSaldoColoc,
+          teaActivaPonderada: Number(teaActivaPonderada.toFixed(2)),
+          spreadFinanciero: Number(spreadFinanciero.toFixed(2)),
+          nroCreditos: kpiNroCreditos,
+          saldoCaja020: kpiSaldoCaja020,
+          saldoCaja020USD: kpiSaldoCaja020USD,
+          saldoCaja020USD_EnSoles: kpiSaldoCaja020USD_EnSoles,
+          saldoBancos: kpiSaldoBancos,
+          saldoBancosUSD: kpiSaldoBancosUSD,
+          liquidezTotal: kpiSaldoCaja020 + kpiSaldoBancos
+        },
+        porAgencia,
+        porAsesor,
+        porProductoAhorro,
+        bancosManual: bancosRows,
+        evolutivo: serieEvolutivaFinal
+      });
+    } catch (error2) {
+      console.error("Error en /api/balance-gerencial:", error2);
+      res.status(500).json({ error: "Error al obtener datos de Balance Gerencial" });
+    }
+  }
+);
+router18.post(
+  ["/balance-gerencial/bancos", "/api/balance-gerencial/bancos"],
+  async (req, res) => {
+    try {
+      const {
+        periodo,
+        fechaCorte,
+        entidadBancaria = "CONSOLIDADO BANCOS",
+        moneda = "MN",
+        saldoBanco,
+        teaPasivaBanco = 0,
+        observacion = "",
+        usuarioRegistro = "Gerencia"
+      } = req.body;
+      const fechaFinal = fechaCorte || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      const periodoFinal = periodo || fechaFinal.replace(/-/g, "").slice(0, 6);
+      const request = pool.request();
+      request.input("periodo", sql14.VarChar(6), String(periodoFinal).trim());
+      request.input("fechaCorte", sql14.Date, fechaFinal);
+      request.input("entidad", sql14.VarChar(100), String(entidadBancaria).trim().toUpperCase());
+      request.input("moneda", sql14.VarChar(2), String(moneda).trim().toUpperCase());
+      request.input("saldo", sql14.Decimal(18, 2), Number(saldoBanco || 0));
+      request.input("tea", sql14.Decimal(10, 4), Number(teaPasivaBanco || 0));
+      request.input("obs", sql14.NVarChar(300), String(observacion || "").trim());
+      request.input("usuario", sql14.VarChar(150), String(usuarioRegistro || "Gerencia").trim());
+      await request.query(`
+        INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual]
+          ([Periodo], [Fecha_Corte], [Entidad_Bancaria], [Moneda], [Saldo_Banco], [TEA_Pasiva_Banco], [Observacion], [Usuario_Registro], [Fecha_Actualizacion])
+        VALUES
+          (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
+      `);
+      res.json({ ok: true });
+    } catch (error2) {
+      console.error("Error guardando saldo en bancos:", error2);
+      res.status(500).json({ error: "No se pudo registrar el saldo en bancos" });
+    }
+  }
+);
+router18.delete(
+  ["/balance-gerencial/bancos/:id", "/api/balance-gerencial/bancos/:id"],
+  async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const request = pool.request();
+      request.input("id", sql14.Int, id);
+      await request.query(`
+        DELETE FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual]
+        WHERE [Id] = @id;
+      `);
+      res.json({ ok: true });
+    } catch (error2) {
+      console.error("Error eliminando saldo en bancos:", error2);
+      res.status(500).json({ error: "No se pudo eliminar el registro de banco" });
+    }
+  }
+);
+var balanceGerencial_default = router18;
+
+// src/routes/index.ts
+var router19 = (0, import_express19.Router)();
+router19.use(health_default);
+router19.use(preventiva_default);
+router19.use(filtros_default);
+router19.use(calendario_default);
+router19.use(gerencia_default);
+router19.use(supervision_default);
+router19.use(agencia_default);
+router19.use(asesores_default);
+router19.use(diaria_default);
+router19.use(evolucion_default);
+router19.use(cancelados_default);
+router19.use(avance_default);
+router19.use(ranking_default);
+router19.use(mora_default);
+router19.use(pagosMora_default);
+router19.use(welcome_default);
+router19.use(productividadViva_default);
+router19.use(balanceGerencial_default);
+var routes_default = router19;
 
 // src/app.ts
-var app = (0, import_express19.default)();
+var app = (0, import_express20.default)();
 app.set("etag", false);
 app.use((0, import_cors.default)());
-app.use(import_express19.default.json());
+app.use(import_express20.default.json());
 app.use(smartCacheMiddleware);
 startCacheWatcher();
 app.get("/health", (req, res) => {
