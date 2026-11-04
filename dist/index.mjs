@@ -21147,27 +21147,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router20;
+    module.exports = Router22;
     module.exports.Route = Route;
-    function Router20(options) {
-      if (!(this instanceof Router20)) {
-        return new Router20(options);
+    function Router22(options) {
+      if (!(this instanceof Router22)) {
+        return new Router22(options);
       }
       const opts = options || {};
-      function router20(req, res, next) {
-        router20.handle(req, res, next);
+      function router22(req, res, next) {
+        router22.handle(req, res, next);
       }
-      Object.setPrototypeOf(router20, this);
-      router20.caseSensitive = opts.caseSensitive;
-      router20.mergeParams = opts.mergeParams;
-      router20.params = {};
-      router20.strict = opts.strict;
-      router20.stack = [];
-      return router20;
+      Object.setPrototypeOf(router22, this);
+      router22.caseSensitive = opts.caseSensitive;
+      router22.mergeParams = opts.mergeParams;
+      router22.params = {};
+      router22.strict = opts.strict;
+      router22.stack = [];
+      return router22;
     }
-    Router20.prototype = function() {
+    Router22.prototype = function() {
     };
-    Router20.prototype.param = function param(name, fn) {
+    Router22.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -21187,7 +21187,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router20.prototype.handle = function handle(req, res, callback) {
+    Router22.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21314,7 +21314,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router20.prototype.use = function use(handler) {
+    Router22.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21347,7 +21347,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router20.prototype.route = function route(path) {
+    Router22.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21362,7 +21362,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router20.prototype[method] = function(path) {
+      Router22.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21545,13 +21545,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router20 = require_router();
+    var Router22 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router20 = null;
+      var router22 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21560,13 +21560,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router20 === null) {
-            router20 = new Router20({
+          if (router22 === null) {
+            router22 = new Router22({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router20;
+          return router22;
         }
       });
     };
@@ -21637,15 +21637,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router20 = this.router;
+      var router22 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router20.use(path, fn2);
+          return router22.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router20.use(path, function mounted_app(req, res, next) {
+        router22.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -24234,7 +24234,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router20 = require_router();
+    var Router22 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24256,8 +24256,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router20.Route;
-    exports.Router = Router20;
+    exports.Route = Router22.Route;
+    exports.Router = Router22;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28871,7 +28871,7 @@ var require_pino = __commonJS({
 var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
-var import_express20 = __toESM(require_express2(), 1);
+var import_express22 = __toESM(require_express2(), 1);
 
 // src/middlewares/errorHandler.ts
 var errorHandler = (err, req, res, next) => {
@@ -28902,7 +28902,7 @@ var errorHandler = (err, req, res, next) => {
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
-var import_express19 = __toESM(require_express2(), 1);
+var import_express21 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -34420,78 +34420,46 @@ router2.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (req, res)
   const analista = analistaParam === "Todos" || analistaParam === "Todos los Analistas" ? "" : analistaParam;
   try {
     const result = await pool.request().input("agencia", sql2.VarChar(60), agencia).input("analista", sql2.VarChar(150), analista).query(`
-        WITH ReporteGestionPreventiva AS (
-            SELECT 
-                CASE (
-                    CASE
-                        WHEN T_ANA.ID_AGE = '98' THEN
-                            CASE
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%10' THEN '10' 
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%11' THEN '11' 
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%12' THEN '12' 
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%13' THEN '13' 
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%6'  THEN '06' 
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%7'  THEN '07' 
-                                ELSE '98'
-                            END
-                        WHEN T_ANA.ID_AGE = '01' THEN
-                            CASE
-                                WHEN RTRIM(T_ANA.ID_USER) LIKE '%9' THEN '09'
-                                ELSE '01'
-                            END
-                        ELSE T_ANA.ID_AGE
-                    END
-                )
-                    WHEN '01' THEN 'Wanchaq'
-                    WHEN '02' THEN 'San Jer\xF3nimo'
-                    WHEN '03' THEN 'Quillabamba'
-                    WHEN '04' THEN 'Sicuani'
-                    WHEN '05' THEN 'Molino'
-                    WHEN '06' THEN 'Juliaca'
-                    WHEN '07' THEN 'Lima Los Olivos'
-                    WHEN '08' THEN 'Tica Tica'
-                    WHEN '09' THEN 'Magisterio'
-                    WHEN '10' THEN 'Lima SJL'
-                    WHEN '11' THEN 'Chiclayo'
-                    WHEN '12' THEN 'Arequipa'
-                    WHEN '13' THEN 'Pucallpa'
-                    ELSE 'Otra Agencia'
-                END AS [agencia],
-                ISNULL(S.RAZON_SOCIAL, LTRIM(RTRIM(S.APE_PATERNO)) + ' ' + LTRIM(RTRIM(S.APE_MATERNO)) + ', ' + LTRIM(RTRIM(S.NOMBRE))) AS [socio],
-                ISNULL(S.TLF_CEL1, ISNULL(S.TLF_CEL2, 'SIN TELEFONO')) AS [telefono],
-                TP.NOM_PROD AS [producto],
-                C.SALDO_PRES AS [saldo_numerico],
-                FORMAT(C.SALDO_PRES, 'N2', 'es-ES') AS [saldo_formateado],
-                LTRIM(RTRIM(T_PER.RAZON)) AS [analista],
-                CONVERT(VARCHAR(10), P.FECHA_VCMTO, 103) AS [fecha_vencimiento],
-                DATEDIFF(day, GETDATE(), P.FECHA_VCMTO) AS [dias_para_vencimiento]
-            FROM [TRANSACMIF].[dbo].[PREEC] C WITH (NOLOCK)
-            INNER JOIN [TRANSACMIF].[dbo].[SOCIOS] S WITH (NOLOCK) ON C.CUENTA = S.CUENTA
-            INNER JOIN [TRANSACMIF].[dbo].[PRESTAMO] P WITH (NOLOCK) ON C.PAGARE = P.PAGARE
-            LEFT JOIN [TRANSACMIF].[dbo].[TIPOPROD] TP WITH (NOLOCK) ON C.TIPO_PROD = TP.TIPO_PROD
-            INNER JOIN [SEGURIDAD].[dbo].[ANAREC] T_ANA WITH (NOLOCK) ON T_ANA.ID_ANAREC = C.ID_ANA AND T_ANA.FLAG_ANAREC = 'A'
-            INNER JOIN [SEGURIDAD].[dbo].[USUARIOS] T_USU WITH (NOLOCK) ON T_USU.ID_USER = T_ANA.ID_USER
-            INNER JOIN [SEGURIDAD].[dbo].[GRUPOUSER] T_GRU WITH (NOLOCK) ON T_GRU.ID_GRUPO = T_USU.ID_GRUPO AND T_GRU.NOM_GRUPO = 'CREDITOS'
-            INNER JOIN [SEGURIDAD].[dbo].[PERSONAL] T_PER WITH (NOLOCK) ON T_PER.DNI = T_USU.DNI
-            INNER JOIN [SEGURIDAD].[dbo].[TCARGO_USER] T_CAR WITH (NOLOCK) ON T_CAR.ID_CARGO = T_PER.ID_CARGO
-            WHERE 
-                C.PERIODO = CONVERT(VARCHAR(6), GETDATE(), 112)
-                AND C.SALDO_PRES > 0            
-                AND P.SALDO_PRES > 0  
-                AND P.FECHA_VCMTO >= CAST(GETDATE() AS DATE)
-                AND P.FECHA_VCMTO <= DATEADD(day, 5, CAST(GETDATE() AS DATE))
-                AND T_CAR.DESCRIP LIKE '%ANALISTA DE CREDITOS%'
-                AND T_USU.ID_USER NOT IN ('PRECASTIGO', 'RJULI6', 'RJULIACA', 'RLIMA7', 'RQUILLA3', 'RSICUA4', 'LHR5', 'HTEJ5', 'TKPN5', 'GHVJ5', 'OTA5', 'SDHF5', 'CMN5', 'HQND5', 'RTRES')
+        DECLARE @UltimaFecha DATE = (
+          SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        );
+
+        WITH BasePreventivaDWH AS (
+          SELECT
+            CASE R.[IdSAgencia]
+              WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba'
+              WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
+              WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
+              WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
+              WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia'
+            END AS [agencia],
+            RTRIM(LTRIM(R.[Socio])) AS [socio],
+            ISNULL(NULLIF(LTRIM(RTRIM(R.[Telefonos])), ''), 'SIN TELEFONO') AS [telefono],
+            ISNULL(R.[Producto], '') AS [producto],
+            ISNULL(R.[Saldo_Capital], 0) AS [saldo_numerico],
+            FORMAT(ISNULL(R.[Saldo_Capital], 0), 'N2', 'es-PE') AS [saldo_formateado],
+            ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS [analista],
+            CONVERT(VARCHAR(10), R.[Fecha_Foto], 103) AS [fecha_vencimiento],
+            ISNULL(R.[Dias_Atraso], 0) AS [dias_para_vencimiento]
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
+          OUTER APPLY (
+            SELECT TOP 1 ISNULL(DA.[AsesorNombresApellidos], DA.[Asesor]) AS NombreAsesor
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] DA WITH (NOLOCK)
+            WHERE RTRIM(LTRIM(DA.[IdSAsesor])) = RTRIM(LTRIM(R.[IdSAsesor]))
+            ORDER BY DA.[Periodo] DESC
+          ) D_AS
+          WHERE R.[Fecha_Foto] = @UltimaFecha
+            AND R.[Probabilidad_IA] >= 30
         )
-        SELECT * FROM ReporteGestionPreventiva
+        SELECT * FROM BasePreventivaDWH
         WHERE (@agencia = '' OR [agencia] = @agencia)
           AND (@analista = '' OR [analista] LIKE '%' + @analista + '%')
-        ORDER BY [dias_para_vencimiento] ASC, [saldo_numerico] DESC;
+        ORDER BY [saldo_numerico] DESC;
       `);
     res.json(result.recordset || []);
   } catch (error2) {
     console.error("Error en /gestion-preventiva:", error2);
-    res.status(500).json({ error: "Error obteniendo datos de Gesti\xF3n Preventiva" });
+    res.status(500).json({ error: "Error obteniendo datos de Gesti\xF3n Preventiva desde DWH" });
   }
 });
 var preventiva_default = router2;
@@ -34515,7 +34483,7 @@ var buckets = {
     name: "gerencial",
     version: "",
     lastFormattedDate: "Sincronizando...",
-    description: "Actualizador Gerencial (Cancelados y Avance)",
+    description: "Actualizador Gerencial (Cancelados y Avance de Cartera)",
     store: /* @__PURE__ */ new Map(),
     knownRoutes: /* @__PURE__ */ new Set()
   },
@@ -34533,9 +34501,9 @@ var buckets = {
     name: "mora",
     version: "",
     lastFormattedDate: "Sincronizando...",
-    description: "Motor de Mora, Compromisos e IA Preventiva",
+    description: "Motor de Mora, Productos, Compromisos e IA Preventiva",
     store: /* @__PURE__ */ new Map(),
-    knownRoutes: /* @__PURE__ */ new Set(["/api/mora", "/api/pagos-mora"])
+    knownRoutes: /* @__PURE__ */ new Set(["/api/mora", "/api/pagos-mora", "/api/mora-producto"])
   },
   vivo: {
     idLog: 5,
@@ -34545,24 +34513,27 @@ var buckets = {
     description: "Productividad en Vivo (Transacmif)",
     store: /* @__PURE__ */ new Map(),
     knownRoutes: /* @__PURE__ */ new Set(["/api/productividad-en-vivo"])
+  },
+  balance: {
+    idLog: 6,
+    name: "balance",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Balance Gerencial (Ahorros, Aportes, Plazo Fijo, Caja 020 y Bancos)",
+    store: /* @__PURE__ */ new Map(),
+    knownRoutes: /* @__PURE__ */ new Set(["/api/balance-gerencial", "/api/plazo-fijo"])
   }
 };
-var lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3e3}`;
+var defaultInternalUrl = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3e3}`;
+var lastKnownBaseUrl = defaultInternalUrl;
 var isChecking = false;
 function resolveBucket(path) {
   const p = path.toLowerCase();
-  if (p.includes("productividad-en-vivo")) {
-    return buckets.vivo;
-  }
-  if (p.includes("cancelados") || p.includes("avance")) {
-    return buckets.gerencial;
-  }
-  if (p.includes("ranking")) {
-    return buckets.ranking;
-  }
-  if (p.includes("mora") || p.includes("preventiva")) {
-    return buckets.mora;
-  }
+  if (p.includes("productividad-en-vivo")) return buckets.vivo;
+  if (p.includes("balance-gerencial") || p.includes("plazo-fijo")) return buckets.balance;
+  if (p.includes("cancelados") || p.includes("avance")) return buckets.gerencial;
+  if (p.includes("ranking")) return buckets.ranking;
+  if (p.includes("mora") || p.includes("preventiva")) return buckets.mora;
   return buckets.etl;
 }
 async function syncVersionsFromDatabase() {
@@ -34574,13 +34545,13 @@ async function syncVersionsFromDatabase() {
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy \xB7 HH:mm:ss', 'es-PE') AS FechaFormateada,
         ISNULL([Descripcion], '') AS Descripcion
       FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      WHERE [Id] IN (1, 2, 3, 4, 5)
+      WHERE [Id] IN (1, 2, 3, 4, 5, 6)
     `);
     const rows = result.recordset || [];
     const mapById = /* @__PURE__ */ new Map();
     rows.forEach((r) => mapById.set(Number(r.Id), r));
     let anyChanged = false;
-    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo"]) {
+    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo", "balance"]) {
       const bucket = buckets[key];
       const row = mapById.get(bucket.idLog);
       if (!row) continue;
@@ -34638,7 +34609,7 @@ function startCacheWatcher() {
   setInterval(checkLoop, 1e4);
 }
 function getCombinedVersionSignature() {
-  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}`;
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}|${buckets.balance.version}`;
 }
 function getLogsStatusByBucket() {
   return {
@@ -34676,23 +34647,41 @@ function getLogsStatusByBucket() {
       fechaHora: buckets.vivo.lastFormattedDate,
       etiqueta: `Productividad en Vivo (Transacmif): ${buckets.vivo.lastFormattedDate}`,
       version: buckets.vivo.version
+    },
+    balance: {
+      id: 6,
+      descripcion: buckets.balance.description,
+      fechaHora: buckets.balance.lastFormattedDate,
+      etiqueta: `Balance Gerencial y Plazo Fijo: ${buckets.balance.lastFormattedDate}`,
+      version: buckets.balance.version
     }
   };
 }
 async function smartCacheMiddleware(req, res, next) {
-  if (req.method !== "GET" || req.path.includes("health")) {
+  const host = req.headers.host;
+  if (host && !process.env.INTERNAL_API_URL) {
+    lastKnownBaseUrl = `http://127.0.0.1:${host.split(":")[1] || process.env.PORT || 3e3}`;
+  }
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const target = resolveBucket(req.path);
+        target.store.clear();
+        syncVersionsFromDatabase().catch(() => {
+        });
+      }
+    });
     return next();
   }
-  const host = req.headers.host;
-  if (host) {
-    lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3e3}`;
+  if (req.path.includes("health")) {
+    return next();
   }
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   if (req.path.endsWith("/cache-clear")) {
     Object.values(buckets).forEach((b) => b.store.clear());
-    return res.json({ ok: true, message: "Los 5 cach\xE9s fueron limpiados manualmente" });
+    return res.json({ ok: true, message: "Los 6 cach\xE9s fueron limpiados manualmente" });
   }
   if (req.path.includes("/filtros")) {
     return next();
@@ -34710,7 +34699,7 @@ async function smartCacheMiddleware(req, res, next) {
   res.json = (body) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
-      if (activeBucket.knownRoutes.size < 20 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+      if (activeBucket.knownRoutes.size < 25 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
         activeBucket.knownRoutes.add(req.originalUrl);
       }
     }
@@ -35902,6 +35891,27 @@ var cancelados_default = router11;
 var import_express12 = __toESM(require_express2(), 1);
 import sql11 from "mssql";
 var router12 = (0, import_express12.Router)();
+var colsEnsured = false;
+async function ensureAvanceCols() {
+  if (colsEnsured) return;
+  await pool.request().query(`
+    IF COL_LENGTH('[DWH_Gestion_Cartera].[dbo].[avance_cartera]', 'Promedio_Dias_Pago') IS NULL
+      ALTER TABLE [DWH_Gestion_Cartera].[dbo].[avance_cartera] ADD [Promedio_Dias_Pago] DECIMAL(10, 1) NOT NULL DEFAULT 0;
+    IF COL_LENGTH('[DWH_Gestion_Cartera].[dbo].[avance_cartera]', 'Maximo_Dias_Atraso') IS NULL
+      ALTER TABLE [DWH_Gestion_Cartera].[dbo].[avance_cartera] ADD [Maximo_Dias_Atraso] INT NOT NULL DEFAULT 0;
+
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_avance_dias_cred]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_avance_dias_cred] (
+        [Pagare] VARCHAR(30) NOT NULL PRIMARY KEY,
+        [Promedio_Dias_Pago] DECIMAL(10, 1) NOT NULL DEFAULT 0,
+        [Maximo_Dias_Atraso] INT NOT NULL DEFAULT 0,
+        [Fecha_Actualizacion] DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    END
+  `);
+  colsEnsured = true;
+}
 router12.get(["/avance", "/api/avance"], async (req, res) => {
   const agenciaParam = req.query.agencia || "";
   const asesorParam = req.query.asesor || "";
@@ -35912,13 +35922,35 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
   const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim();
   const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
   try {
+    await ensureAvanceCols();
     const request = pool.request();
     const filtroVistaSQL = vista === "comercial" ? `AND DA.Agencia IS NOT NULL AND DA.Agencia NOT IN ('Agencia Desconocida', 'NULL')` : `AND (DA.Agencia IS NULL OR DA.Agencia IN ('Agencia Desconocida', 'NULL'))`;
     const querySQL = `
-      SELECT 
+      WITH RiesgoPorPagare AS (
+        SELECT
+          LTRIM(RTRIM([Pagare])) AS Pagare,
+          CAST(ROUND(AVG(CAST(ISNULL([Dias_Atraso], 0) AS FLOAT)), 1) AS DECIMAL(10, 1)) AS Prom_Riesgo,
+          MAX(ISNULL([Dias_Atraso], 0)) AS Max_Riesgo
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        GROUP BY LTRIM(RTRIM([Pagare]))
+      ),
+      BaseAvance AS (
+        SELECT
           ISNULL(DA.Agencia, 'Agencia Desconocida') AS Agencia,
           ISNULL(D_AS.Asesor, A.IdSAsesor) AS Asesor,
           ISNULL(A.[Avance Cartera], 0) AS AvanceCartera,
+          COALESCE(
+            NULLIF(A.[Promedio_Dias_Pago], 0),
+            NULLIF(AD.[Promedio_Dias_Pago], 0),
+            RP.Prom_Riesgo,
+            0
+          ) AS PromedioDiasPago,
+          COALESCE(
+            NULLIF(A.[Maximo_Dias_Atraso], 0),
+            NULLIF(AD.[Maximo_Dias_Atraso], 0),
+            RP.Max_Riesgo,
+            0
+          ) AS MaximoDiasAtraso,
           RIGHT('000000000000' + LTRIM(RTRIM(CAST(A.Cuenta AS VARCHAR(20)))), 12) AS Cuenta,
           A.Pagare,
           A.Socio,
@@ -35927,25 +35959,35 @@ router12.get(["/avance", "/api/avance"], async (req, res) => {
           ISNULL(A.[Telefono 1], '') AS TelefonoFijo1,
           ISNULL(A.[Telefono 2], '') AS TelefonoFijo2,
           ISNULL(A.[Cuotas Total], 0) AS CuotasTotal,
-          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas,
-          COUNT(*) OVER() AS TotalRegistrosGlobal,
-          AVG(CAST(ISNULL(A.[Avance Cartera], 0) AS FLOAT)) OVER() AS PromedioAvanceGlobal
-      FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
-      OUTER APPLY (
+          ISNULL(A.[Cuotas Canceladas], 0) AS CuotasCanceladas
+        FROM [DWH_Gestion_Cartera].[dbo].[avance_cartera] A WITH (NOLOCK)
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_avance_dias_cred] AD WITH (NOLOCK)
+          ON LTRIM(RTRIM(A.Pagare)) = AD.Pagare
+        LEFT JOIN RiesgoPorPagare RP
+          ON LTRIM(RTRIM(A.Pagare)) = RP.Pagare
+        OUTER APPLY (
           SELECT TOP 1 
-              D.[IdSAgencia],
-              D.[Asesor],
-              D.[AsesorNombresApellidos]
+            D.[IdSAgencia],
+            D.[Asesor],
+            D.[AsesorNombresApellidos]
           FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] D WITH (NOLOCK)
           WHERE RTRIM(LTRIM(D.[IdSAsesor])) = RTRIM(LTRIM(A.[IdSAsesor]))
           ORDER BY D.[Periodo] DESC
-      ) D_AS
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
+        ) D_AS
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_agencia] DA WITH (NOLOCK)
           ON RIGHT('00' + RTRIM(LTRIM(D_AS.IdSAgencia)), 2) = RIGHT('00' + RTRIM(LTRIM(DA.IdSAgencia)), 2)
-      WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
-        AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
-        ${filtroVistaSQL}
-      ORDER BY A.[Avance Cartera] DESC, A.Pagare ASC
+        WHERE (@agencia = '' OR RTRIM(LTRIM(DA.Agencia)) = @agencia)
+          AND (@asesor = '' OR RTRIM(LTRIM(D_AS.AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(D_AS.Asesor)) = @asesor)
+          ${filtroVistaSQL}
+      )
+      SELECT
+        *,
+        COUNT(*) OVER() AS TotalRegistrosGlobal,
+        AVG(CAST(AvanceCartera AS FLOAT)) OVER() AS PromedioAvanceGlobal,
+        AVG(CAST(PromedioDiasPago AS FLOAT)) OVER() AS PromedioDiasPagoGlobal,
+        MAX(MaximoDiasAtraso) OVER() AS MaximoDiasAtrasoGlobal
+      FROM BaseAvance
+      ORDER BY AvanceCartera DESC, Pagare ASC
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
     `;
     const result = await request.input("agencia", sql11.VarChar(50), agencia).input("asesor", sql11.VarChar(100), asesor).input("offset", sql11.Int, offset).input("limit", sql11.Int, limit).query(querySQL);
@@ -35964,23 +36006,49 @@ router13.get(["/ranking", "/api/ranking"], async (_req, res) => {
   try {
     const request = pool.request();
     const querySQL = `
-      SELECT TOP (1000) 
+      WITH UltimoPorAsesor AS (
+        SELECT
           CONVERT(VARCHAR(10), CAST([Fecha_Calculo] AS DATE), 23) + 'T12:00:00' AS [Fecha_Calculo],
-          [IdSAsesor],
-          [Asesor],
-          [Agencia],
-          [Operaciones],
-          [Crecimiento_Neto_150],
-          [Seguros_Vendidos],
-          [Puntos_Op],
-          [Puntos_Crec],
-          [Puntos_Seg],
-          [Puntaje_Total],
-          [Puesto_Actual],
+          RTRIM(LTRIM([IdSAsesor])) AS [IdSAsesor],
+          RTRIM(LTRIM([Asesor])) AS [Asesor],
+          RTRIM(LTRIM([Agencia])) AS [Agencia],
+          ISNULL([Operaciones], 0) AS [Operaciones],
+          ISNULL([Crecimiento_Neto_150], 0) AS [Crecimiento_Neto_150],
+          ISNULL([Seguros_Vendidos], 0) AS [Seguros_Vendidos],
+          ISNULL([Puntos_Op], 0) AS [Puntos_Op],
+          ISNULL([Puntos_Crec], 0) AS [Puntos_Crec],
+          ISNULL([Puntos_Seg], 0) AS [Puntos_Seg],
+          ISNULL([Puntaje_Total], 0) AS [Puntaje_Total],
+          [Puesto_Actual] AS [Puesto_Original],
           [Puesto_Anterior],
-          [Comentario_Creativo]
-      FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
-      ORDER BY [Puesto_Actual] ASC;
+          [Comentario_Creativo],
+          ROW_NUMBER() OVER (
+            PARTITION BY RTRIM(LTRIM(ISNULL(NULLIF([IdSAsesor], ''), [Asesor])))
+            ORDER BY CAST([Fecha_Calculo] AS DATETIME) DESC, [Puntaje_Total] DESC, [Operaciones] DESC
+          ) AS rn
+        FROM [DWH_Gestion_Cartera].[dbo].[ranking_asesor_10] WITH (NOLOCK)
+      )
+      SELECT
+        [Fecha_Calculo],
+        [IdSAsesor],
+        [Asesor],
+        [Agencia],
+        [Operaciones],
+        [Crecimiento_Neto_150],
+        [Seguros_Vendidos],
+        [Puntos_Op],
+        [Puntos_Crec],
+        [Puntos_Seg],
+        [Puntaje_Total],
+        CAST(
+          RANK() OVER (ORDER BY [Puntaje_Total] DESC, [Operaciones] DESC, [Crecimiento_Neto_150] DESC)
+          AS INT
+        ) AS [Puesto_Actual],
+        [Puesto_Anterior],
+        [Comentario_Creativo]
+      FROM UltimoPorAsesor
+      WHERE rn = 1
+      ORDER BY [Puesto_Actual] ASC, [Operaciones] DESC;
     `;
     const result = await request.query(querySQL);
     res.json(result.recordset);
@@ -37026,6 +37094,16 @@ var AGENCY_NAMES = {
   "13": "Pucallpa",
   "98": "Agencia Digital (98)"
 };
+var esSubtipoAporte = (tipoAho, subtipoAho) => {
+  const t = String(tipoAho || "").trim();
+  const s = String(subtipoAho || "").trim();
+  return t === "01" || t === "09" && s === "102";
+};
+var esSubtipoExcluido = (tipoAho, subtipoAho) => {
+  const t = String(tipoAho || "").trim();
+  const s = String(subtipoAho || "").trim();
+  return t === "09" && s === "101";
+};
 router18.get(
   ["/balance-gerencial", "/api/balance-gerencial"],
   async (req, res) => {
@@ -37038,6 +37116,14 @@ router18.get(
       const fechaFiltro = String(req.query.fecha || "CIERRE").trim();
       const rawMoneda = String(req.query.moneda || "MN").toUpperCase().trim();
       const monedaFiltro = rawMoneda === "ME" || rawMoneda === "CONSOLIDADO" ? rawMoneda : "MN";
+      const rawTipoCap = String(req.query.tipoCaptacion || "COMBINADO").toUpperCase().trim();
+      const tipoCaptacion = rawTipoCap === "AHORROS" || rawTipoCap === "APORTES" ? rawTipoCap : "COMBINADO";
+      const sqlExcluir09101Stock = `AND NOT (LTRIM(RTRIM(S.[Tipo_Aho])) = '09' AND LTRIM(RTRIM(S.[Subtipo_Aho])) = '101')`;
+      const sqlExcluir09101Flujo = `AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')`;
+      const sqlCondAporteStock = `(LTRIM(RTRIM(S.[Tipo_Aho])) = '01' OR (LTRIM(RTRIM(S.[Tipo_Aho])) = '09' AND LTRIM(RTRIM(S.[Subtipo_Aho])) = '102'))`;
+      const sqlCondAporteFlujo = `(LTRIM(RTRIM([Tipo_Aho])) = '01' OR (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '102'))`;
+      const sqlFiltroCapStock = tipoCaptacion === "APORTES" ? `WHEN ${sqlCondAporteStock}` : tipoCaptacion === "AHORROS" ? `WHEN LTRIM(RTRIM(S.[Tipo_Aho])) <> '03' AND NOT ${sqlCondAporteStock}` : `WHEN LTRIM(RTRIM(S.[Tipo_Aho])) <> '03'`;
+      const sqlFiltroCapFlujo = tipoCaptacion === "APORTES" ? `WHEN ${sqlCondAporteFlujo}` : tipoCaptacion === "AHORROS" ? `WHEN LTRIM(RTRIM([Tipo_Aho])) <> '03' AND NOT ${sqlCondAporteFlujo}` : `WHEN LTRIM(RTRIM([Tipo_Aho])) <> '03'`;
       const resPeriodos = await pool.request().query(`
         SELECT DISTINCT [Periodo]
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
@@ -37096,10 +37182,10 @@ router18.get(
           ${colAgencia} AS IdSAgencia,
           [IdSAsesor],
           MAX([Nombre_Usuario]) AS Nombre_Usuario,
-          [Tipo_Aho],
-          [Subtipo_Aho],
+          LTRIM(RTRIM([Tipo_Aho])) AS Tipo_Aho,
+          LTRIM(RTRIM([Subtipo_Aho])) AS Subtipo_Aho,
           MAX([Nombre_Producto]) AS Nombre_Producto,
-          [Moneda],
+          LTRIM(RTRIM([Moneda])) AS Moneda,
           MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
           SUM([Nro_Cuentas]) AS Nro_Cuentas,
           SUM([Saldo_Total]) AS Saldo_Original,
@@ -37107,10 +37193,11 @@ router18.get(
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
         WHERE [Periodo] = @periodo
           AND (@FechaStock IS NULL OR [Fecha_Corte] = @FechaStock)
+          AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')
           AND (@agencia = '' OR ${colAgencia} = @agencia)
           AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
           AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
-        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+        GROUP BY ${colAgencia}, [IdSAsesor], LTRIM(RTRIM([Tipo_Aho])), LTRIM(RTRIM([Subtipo_Aho])), LTRIM(RTRIM([Moneda]));
       `;
       const reqFlujo = pool.request();
       reqFlujo.input("periodo", sql14.VarChar(6), periodo);
@@ -37123,10 +37210,10 @@ router18.get(
           ${colAgencia} AS IdSAgencia,
           [IdSAsesor],
           MAX([Nombre_Usuario]) AS Nombre_Usuario,
-          [Tipo_Aho],
-          [Subtipo_Aho],
+          LTRIM(RTRIM([Tipo_Aho])) AS Tipo_Aho,
+          LTRIM(RTRIM([Subtipo_Aho])) AS Subtipo_Aho,
           MAX([Nombre_Producto]) AS Nombre_Producto,
-          [Moneda],
+          LTRIM(RTRIM([Moneda])) AS Moneda,
           MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
           SUM([Monto_Depositos]) AS Monto_Depositos,
           SUM([Monto_Retiros]) AS Monto_Retiros,
@@ -37135,10 +37222,11 @@ router18.get(
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
         WHERE [Periodo] = @periodo
           AND (@fecha = '' OR [Fecha_Mov] = CAST(@fecha AS DATE))
+          AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')
           AND (@agencia = '' OR ${colAgencia} = @agencia)
           AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
           AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
-        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+        GROUP BY ${colAgencia}, [IdSAsesor], LTRIM(RTRIM([Tipo_Aho])), LTRIM(RTRIM([Subtipo_Aho])), LTRIM(RTRIM([Moneda]));
       `;
       const reqColoc = pool.request();
       reqColoc.input("periodo", sql14.VarChar(6), periodo);
@@ -37188,6 +37276,7 @@ router18.get(
 
         SELECT
           [IdSAgencia_Origen] AS IdSAgencia,
+          MAX(ISNULL([Tipo_Cambio], 0)) AS Tipo_Cambio,
           SUM([Saldo_Inicial_MN]) AS Saldo_Inicial_MN,
           SUM([Total_Ingresos_MN]) AS Total_Ingresos_MN,
           SUM([Total_Egresos_MN]) AS Total_Egresos_MN,
@@ -37228,7 +37317,7 @@ router18.get(
       reqEvo.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
       reqEvo.input("todoPreec", sql14.Bit, incluirTodoPreec ? 1 : 0);
       reqEvo.input("moneda", sql14.VarChar(15), monedaFiltro);
-      const exprFactorTC = `CASE WHEN [Moneda] = 'ME' THEN ISNULL([Tipo_Cambio], 3.75) ELSE 1.0 END`;
+      const exprFactorTC = `CASE WHEN [Moneda] = 'ME' THEN ISNULL([Tipo_Cambio], 3.433) ELSE 1.0 END`;
       const queryEvolutivo = granularidad === "Mensual" ? `
         WITH ColocMes AS (
           SELECT
@@ -37248,11 +37337,12 @@ router18.get(
         AhoMes AS (
           SELECT
             S.[Periodo] AS Etiqueta,
-            SUM(CASE WHEN S.[Tipo_Aho] <> '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Ahorros,
-            SUM(CASE WHEN S.[Tipo_Aho] = '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Plazo_Fijo,
+            SUM(CASE ${sqlFiltroCapStock} THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Ahorros,
+            SUM(CASE WHEN LTRIM(RTRIM(S.[Tipo_Aho])) = '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Plazo_Fijo,
             SUM(S.[Numerador_Saldo_x_TEA] * (${exprFactorTC})) / NULLIF(SUM(S.[Saldo_Total] * (${exprFactorTC})), 0) AS TEA_Pasiva
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] S WITH (NOLOCK)
           WHERE S.[Es_Foto_Actual] = 1
+            ${sqlExcluir09101Stock}
             AND (@agencia = '' OR S.${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR S.[Moneda] = @moneda)
           GROUP BY S.[Periodo]
@@ -37263,7 +37353,9 @@ router18.get(
             SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
             SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
-          WHERE (@agencia = '' OR ${colAgencia} = @agencia)
+          WHERE 1 = 1
+            ${sqlExcluir09101Flujo}
+            AND (@agencia = '' OR ${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
           GROUP BY [Periodo]
         ),
@@ -37312,10 +37404,11 @@ router18.get(
             CONVERT(VARCHAR(10), [Fecha_Mov], 23) AS Etiqueta,
             SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
             SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros,
-            SUM(CASE WHEN [Tipo_Aho] <> '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_Ahorros,
-            SUM(CASE WHEN [Tipo_Aho] = '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_PF
+            SUM(CASE ${sqlFiltroCapFlujo} THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_Ahorros,
+            SUM(CASE WHEN LTRIM(RTRIM([Tipo_Aho])) = '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_PF
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
           WHERE [Periodo] = @periodo
+            ${sqlExcluir09101Flujo}
             AND (@agencia = '' OR ${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
           GROUP BY CONVERT(VARCHAR(10), [Fecha_Mov], 23)
@@ -37372,11 +37465,82 @@ router18.get(
       const cajaRows = resCaja.recordset || [];
       const bancosRows = resBancos.recordset || [];
       const evoRows = resEvo.recordset || [];
-      let tipoCambioPeriodo = 3.75;
+      let porTipoPrestamo = [];
+      try {
+        const reqPres = pool.request();
+        reqPres.input("periodo", sql14.VarChar(6), periodo);
+        reqPres.input("fecha", sql14.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+        reqPres.input("agencia", sql14.VarChar(10), codAgenciaFiltro);
+        reqPres.input("asesor", sql14.VarChar(50), asesorFiltro === "Todos" ? "" : asesorFiltro);
+        reqPres.input("todoPreec", sql14.Bit, incluirTodoPreec ? 1 : 0);
+        const resPres = await reqPres.query(`
+          IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo]', 'U') IS NOT NULL
+          BEGIN
+            DECLARE @FechaColocTipo DATE;
+            IF @fecha <> '' AND EXISTS (
+              SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE)
+            )
+              SELECT @FechaColocTipo = MAX([Fecha_Corte])
+              FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE);
+            ELSE
+              SELECT @FechaColocTipo = MAX([Fecha_Corte])
+              FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo;
+
+            SELECT
+              ISNULL(LTRIM(RTRIM([Cod_Tipo_Pres])), '00') AS codTipo,
+              ISNULL(LTRIM(RTRIM([Tipo_Prestamo])), 'OTROS') AS tipoPrestamo,
+              SUM([Nro_Creditos]) AS nroCreditos,
+              SUM([Saldo_Colocaciones]) AS saldoColocaciones,
+              SUM([Saldo_Vigente]) AS saldoVigente,
+              SUM([Saldo_Refinanciado]) AS saldoRefinanciado,
+              SUM([Saldo_Judicial]) AS saldoJudicial,
+              SUM([Saldo_Vencido]) AS saldoVencido,
+              SUM([Numerador_Saldo_x_TEA]) AS numeradorTea
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+            WHERE [Periodo] = @periodo
+              AND (@FechaColocTipo IS NULL OR [Fecha_Corte] = @FechaColocTipo)
+              AND (@todoPreec = 1 OR [Es_Cartera_Comercial] = 1)
+              AND (@agencia = '' OR ${colAgencia} = @agencia)
+              AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Asesor] = @asesor)
+            GROUP BY [Cod_Tipo_Pres], [Tipo_Prestamo]
+            ORDER BY saldoColocaciones DESC;
+          END
+        `);
+        porTipoPrestamo = (resPres.recordset || []).map((r) => {
+          const saldo = Number(r.saldoColocaciones || 0);
+          const venc = Number(r.saldoVencido || 0) + Number(r.saldoJudicial || 0);
+          return {
+            codTipo: r.codTipo,
+            tipoPrestamo: r.tipoPrestamo,
+            nroCreditos: Number(r.nroCreditos || 0),
+            saldoColocaciones: saldo,
+            saldoVigente: Number(r.saldoVigente || 0),
+            saldoRefinanciado: Number(r.saldoRefinanciado || 0),
+            saldoJudicial: Number(r.saldoJudicial || 0),
+            saldoVencido: Number(r.saldoVencido || 0),
+            pctMora: saldo > 0 ? Number((venc / saldo * 100).toFixed(2)) : 0,
+            teaPonderada: Number((saldo > 0 ? Number(r.numeradorTea || 0) / saldo : 0).toFixed(2))
+          };
+        });
+      } catch (errTipo) {
+        console.warn("Aviso leyendo fct_gerencia_colocaciones_tipo en DWH:", errTipo);
+      }
+      let tipoCambioPeriodo = 0;
       for (const r of ahoRows) {
-        if (String(r.Moneda).trim() === "ME" && Number(r.Tipo_Cambio) > 1) {
+        if (String(r.Moneda).trim() === "ME" && Number(r.Tipo_Cambio) > 0) {
           tipoCambioPeriodo = Number(r.Tipo_Cambio);
           break;
+        }
+      }
+      if (tipoCambioPeriodo === 0 && cajaRows.length > 0) {
+        for (const c of cajaRows) {
+          if (Number(c.Tipo_Cambio) > 0) {
+            tipoCambioPeriodo = Number(c.Tipo_Cambio);
+            break;
+          }
         }
       }
       const agenciaMap = /* @__PURE__ */ new Map();
@@ -37392,6 +37556,12 @@ router18.get(
             saldoAhorrosUSD: 0,
             saldoAhorrosUSD_Soles: 0,
             numTeaAhorros: 0,
+            saldoSoloAhorros: 0,
+            saldoSoloAhorrosUSD: 0,
+            numTeaSoloAhorros: 0,
+            saldoSoloAportes: 0,
+            saldoSoloAportesUSD: 0,
+            numTeaSoloAportes: 0,
             saldoPlazoFijo: 0,
             saldoPlazoFijoUSD: 0,
             saldoPlazoFijoUSD_Soles: 0,
@@ -37422,6 +37592,10 @@ router18.get(
             saldoAhorrosUSD: 0,
             saldoAhorrosUSD_Soles: 0,
             numTeaAhorros: 0,
+            saldoSoloAhorros: 0,
+            numTeaSoloAhorros: 0,
+            saldoSoloAportes: 0,
+            numTeaSoloAportes: 0,
             saldoPlazoFijo: 0,
             saldoPlazoFijoUSD: 0,
             saldoPlazoFijoUSD_Soles: 0,
@@ -37439,17 +37613,29 @@ router18.get(
       let kpiSaldoAhorrosUSD = 0;
       let kpiSaldoAhorrosUSD_EnSoles = 0;
       let kpiNumTeaAhorros = 0;
+      let kpiSoloAhorrosSoles = 0;
+      let kpiSoloAhorrosUSD = 0;
+      let kpiSoloAhorrosUSD_EnSoles = 0;
+      let kpiNumTeaSoloAhorros = 0;
+      let kpiSoloAportesSoles = 0;
+      let kpiSoloAportesUSD = 0;
+      let kpiSoloAportesUSD_EnSoles = 0;
+      let kpiNumTeaSoloAportes = 0;
       let kpiSaldoPFSoles = 0;
       let kpiSaldoPFUSD = 0;
       let kpiSaldoPFUSD_EnSoles = 0;
       let kpiNumTeaPF = 0;
       ahoRows.forEach((r) => {
+        const tipoAho = String(r.Tipo_Aho || "").trim();
+        const subtipoAho = String(r.Subtipo_Aho || "").trim();
+        if (esSubtipoExcluido(tipoAho, subtipoAho)) return;
         const esME = String(r.Moneda).trim() === "ME";
         const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1;
         const saldoOrig = Number(r.Saldo_Original || 0);
         const saldoEnSoles = esME ? saldoOrig * tc : saldoOrig;
         const numTeaEnSoles = Number(r.Numerador_TEA_Original || 0) * tc;
-        const esPF = String(r.Tipo_Aho).trim() === "03";
+        const esPF = tipoAho === "03";
+        const esAporte = esSubtipoAporte(tipoAho, subtipoAho);
         const ag = ensureAgencia(r.IdSAgencia);
         const as = ensureAsesor(r.IdSAsesor, r.Nombre_Usuario, r.IdSAgencia);
         if (esPF) {
@@ -37468,51 +37654,90 @@ router18.get(
             as.saldoPlazoFijoUSD_Soles += saldoEnSoles;
           }
         } else {
-          kpiSaldoAhorrosSoles += saldoEnSoles;
-          kpiNumTeaAhorros += numTeaEnSoles;
-          ag.saldoAhorros += saldoEnSoles;
-          ag.numTeaAhorros += numTeaEnSoles;
-          as.saldoAhorros += saldoEnSoles;
-          as.numTeaAhorros += numTeaEnSoles;
-          if (esME) {
-            kpiSaldoAhorrosUSD += saldoOrig;
-            kpiSaldoAhorrosUSD_EnSoles += saldoEnSoles;
-            ag.saldoAhorrosUSD += saldoOrig;
-            ag.saldoAhorrosUSD_Soles += saldoEnSoles;
-            as.saldoAhorrosUSD += saldoOrig;
-            as.saldoAhorrosUSD_Soles += saldoEnSoles;
+          if (esAporte) {
+            kpiSoloAportesSoles += saldoEnSoles;
+            kpiNumTeaSoloAportes += numTeaEnSoles;
+            ag.saldoSoloAportes += saldoEnSoles;
+            ag.numTeaSoloAportes += numTeaEnSoles;
+            as.saldoSoloAportes += saldoEnSoles;
+            as.numTeaSoloAportes += numTeaEnSoles;
+            if (esME) {
+              kpiSoloAportesUSD += saldoOrig;
+              kpiSoloAportesUSD_EnSoles += saldoEnSoles;
+              ag.saldoSoloAportesUSD += saldoOrig;
+            }
+          } else {
+            kpiSoloAhorrosSoles += saldoEnSoles;
+            kpiNumTeaSoloAhorros += numTeaEnSoles;
+            ag.saldoSoloAhorros += saldoEnSoles;
+            ag.numTeaSoloAhorros += numTeaEnSoles;
+            as.saldoSoloAhorros += saldoEnSoles;
+            as.numTeaSoloAhorros += numTeaEnSoles;
+            if (esME) {
+              kpiSoloAhorrosUSD += saldoOrig;
+              kpiSoloAhorrosUSD_EnSoles += saldoEnSoles;
+              ag.saldoSoloAhorrosUSD += saldoOrig;
+            }
+          }
+          const incluirEnActivo = tipoCaptacion === "COMBINADO" || tipoCaptacion === "APORTES" && esAporte || tipoCaptacion === "AHORROS" && !esAporte;
+          if (incluirEnActivo) {
+            kpiSaldoAhorrosSoles += saldoEnSoles;
+            kpiNumTeaAhorros += numTeaEnSoles;
+            ag.saldoAhorros += saldoEnSoles;
+            ag.numTeaAhorros += numTeaEnSoles;
+            as.saldoAhorros += saldoEnSoles;
+            as.numTeaAhorros += numTeaEnSoles;
+            if (esME) {
+              kpiSaldoAhorrosUSD += saldoOrig;
+              kpiSaldoAhorrosUSD_EnSoles += saldoEnSoles;
+              ag.saldoAhorrosUSD += saldoOrig;
+              ag.saldoAhorrosUSD_Soles += saldoEnSoles;
+              as.saldoAhorrosUSD += saldoOrig;
+              as.saldoAhorrosUSD_Soles += saldoEnSoles;
+            }
           }
         }
-        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
-        if (!productoMap.has(prodKey)) {
-          productoMap.set(prodKey, {
-            codigo: prodKey,
-            tipoAho: r.Tipo_Aho,
-            subtipoAho: r.Subtipo_Aho,
-            producto: r.Nombre_Producto,
-            moneda: r.Moneda,
-            tipoCambio: Number(tc.toFixed(4)),
-            nroCuentas: 0,
-            saldoOriginal: 0,
-            saldoTotal: 0,
-            numTea: 0,
-            depositosOriginal: 0,
-            depositos: 0,
-            retirosOriginal: 0,
-            retiros: 0
-          });
+        const mostrarProducto = esPF || tipoCaptacion === "COMBINADO" || tipoCaptacion === "APORTES" && esAporte || tipoCaptacion === "AHORROS" && !esAporte;
+        if (mostrarProducto) {
+          const prodKey = `${tipoAho}-${subtipoAho}`;
+          if (!productoMap.has(prodKey)) {
+            productoMap.set(prodKey, {
+              codigo: prodKey,
+              tipoAho,
+              subtipoAho,
+              categoria: esPF ? "PLAZO FIJO" : esAporte ? "APORTES (31110101)" : "AHORROS",
+              producto: r.Nombre_Producto,
+              moneda: r.Moneda,
+              tipoCambio: Number(tc.toFixed(4)),
+              nroCuentas: 0,
+              saldoOriginal: 0,
+              saldoTotal: 0,
+              numTea: 0,
+              depositosOriginal: 0,
+              depositos: 0,
+              retirosOriginal: 0,
+              retiros: 0
+            });
+          }
+          const prod = productoMap.get(prodKey);
+          prod.nroCuentas += Number(r.Nro_Cuentas || 0);
+          prod.saldoOriginal += saldoOrig;
+          prod.saldoTotal += saldoEnSoles;
+          prod.numTea += numTeaEnSoles;
         }
-        const prod = productoMap.get(prodKey);
-        prod.nroCuentas += Number(r.Nro_Cuentas || 0);
-        prod.saldoOriginal += saldoOrig;
-        prod.saldoTotal += saldoEnSoles;
-        prod.numTea += numTeaEnSoles;
       });
       let kpiDepositosSoles = 0;
       let kpiDepositosUSD = 0;
       let kpiRetirosSoles = 0;
       let kpiRetirosUSD = 0;
       flujoRows.forEach((r) => {
+        const tipoAho = String(r.Tipo_Aho || "").trim();
+        const subtipoAho = String(r.Subtipo_Aho || "").trim();
+        if (esSubtipoExcluido(tipoAho, subtipoAho)) return;
+        const esPF = tipoAho === "03";
+        const esAporte = esSubtipoAporte(tipoAho, subtipoAho);
+        const incluirFlujo = esPF || tipoCaptacion === "COMBINADO" || tipoCaptacion === "APORTES" && esAporte || tipoCaptacion === "AHORROS" && !esAporte;
+        if (!incluirFlujo) return;
         const esME = String(r.Moneda).trim() === "ME";
         const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1;
         const depOrig = Number(r.Monto_Depositos || 0);
@@ -37535,7 +37760,7 @@ router18.get(
         const as = ensureAsesor(r.IdSAsesor, r.Nombre_Usuario, r.IdSAgencia);
         as.depositos += depSoles;
         as.retiros += retSoles;
-        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
+        const prodKey = `${tipoAho}-${subtipoAho}`;
         if (productoMap.has(prodKey)) {
           const prod = productoMap.get(prodKey);
           prod.depositosOriginal += depOrig;
@@ -37600,6 +37825,8 @@ router18.get(
         }
       });
       const teaPasivaAhorros = kpiSaldoAhorrosSoles > 0 ? kpiNumTeaAhorros / kpiSaldoAhorrosSoles : 0;
+      const teaSoloAhorros = kpiSoloAhorrosSoles > 0 ? kpiNumTeaSoloAhorros / kpiSoloAhorrosSoles : 0;
+      const teaSoloAportes = kpiSoloAportesSoles > 0 ? kpiNumTeaSoloAportes / kpiSoloAportesSoles : 0;
       const teaPasivaPlazoFijo = kpiSaldoPFSoles > 0 ? kpiNumTeaPF / kpiSaldoPFSoles : 0;
       const saldoCaptacionesTotal = kpiSaldoAhorrosSoles + kpiSaldoPFSoles;
       const teaPasivaGlobal = saldoCaptacionesTotal > 0 ? (kpiNumTeaAhorros + kpiNumTeaPF) / saldoCaptacionesTotal : 0;
@@ -37608,6 +37835,8 @@ router18.get(
       const porAgencia = Array.from(agenciaMap.values()).map((a) => {
         const totalCap = a.saldoAhorros + a.saldoPlazoFijo;
         const teaAho = a.saldoAhorros > 0 ? a.numTeaAhorros / a.saldoAhorros : 0;
+        const teaSoloAho = a.saldoSoloAhorros > 0 ? a.numTeaSoloAhorros / a.saldoSoloAhorros : 0;
+        const teaSoloApo = a.saldoSoloAportes > 0 ? a.numTeaSoloAportes / a.saldoSoloAportes : 0;
         const teaPF = a.saldoPlazoFijo > 0 ? a.numTeaPlazoFijo / a.saldoPlazoFijo : 0;
         const teaPasiva = totalCap > 0 ? (a.numTeaAhorros + a.numTeaPlazoFijo) / totalCap : 0;
         const teaActiva = a.saldoColocaciones > 0 ? a.numTeaColocaciones / a.saldoColocaciones : 0;
@@ -37615,6 +37844,8 @@ router18.get(
           ...a,
           totalCaptaciones: totalCap,
           teaAhorros: Number(teaAho.toFixed(2)),
+          teaSoloAhorros: Number(teaSoloAho.toFixed(2)),
+          teaSoloAportes: Number(teaSoloApo.toFixed(2)),
           teaPlazoFijo: Number(teaPF.toFixed(2)),
           teaPasivaTotal: Number(teaPasiva.toFixed(2)),
           teaActiva: Number(teaActiva.toFixed(2)),
@@ -37624,6 +37855,8 @@ router18.get(
       const porAsesor = Array.from(asesorMap.values()).map((as) => {
         const totalCap = as.saldoAhorros + as.saldoPlazoFijo;
         const teaAho = as.saldoAhorros > 0 ? as.numTeaAhorros / as.saldoAhorros : 0;
+        const teaSoloAho = as.saldoSoloAhorros > 0 ? as.numTeaSoloAhorros / as.saldoSoloAhorros : 0;
+        const teaSoloApo = as.saldoSoloAportes > 0 ? as.numTeaSoloAportes / as.saldoSoloAportes : 0;
         const teaPF = as.saldoPlazoFijo > 0 ? as.numTeaPlazoFijo / as.saldoPlazoFijo : 0;
         const teaPasiva = totalCap > 0 ? (as.numTeaAhorros + as.numTeaPlazoFijo) / totalCap : 0;
         const teaActiva = as.saldoColocaciones > 0 ? as.numTeaColocaciones / as.saldoColocaciones : 0;
@@ -37631,6 +37864,8 @@ router18.get(
           ...as,
           totalCaptaciones: totalCap,
           teaAhorros: Number(teaAho.toFixed(2)),
+          teaSoloAhorros: Number(teaSoloAho.toFixed(2)),
+          teaSoloAportes: Number(teaSoloApo.toFixed(2)),
           teaPlazoFijo: Number(teaPF.toFixed(2)),
           teaPasivaTotal: Number(teaPasiva.toFixed(2)),
           teaActiva: Number(teaActiva.toFixed(2))
@@ -37712,6 +37947,14 @@ router18.get(
           saldoAhorrosUSD: kpiSaldoAhorrosUSD,
           saldoAhorrosUSD_EnSoles: kpiSaldoAhorrosUSD_EnSoles,
           teaPasivaAhorros: Number(teaPasivaAhorros.toFixed(2)),
+          saldoSoloAhorros: kpiSoloAhorrosSoles,
+          saldoSoloAhorrosUSD: kpiSoloAhorrosUSD,
+          saldoSoloAhorrosUSD_EnSoles: kpiSoloAhorrosUSD_EnSoles,
+          teaSoloAhorros: Number(teaSoloAhorros.toFixed(2)),
+          saldoSoloAportes: kpiSoloAportesSoles,
+          saldoSoloAportesUSD: kpiSoloAportesUSD,
+          saldoSoloAportesUSD_EnSoles: kpiSoloAportesUSD_EnSoles,
+          teaSoloAportes: Number(teaSoloAportes.toFixed(2)),
           saldoPlazoFijo: kpiSaldoPFSoles,
           saldoPlazoFijoUSD: kpiSaldoPFUSD,
           saldoPlazoFijoUSD_EnSoles: kpiSaldoPFUSD_EnSoles,
@@ -37739,6 +37982,7 @@ router18.get(
         porAgencia,
         porAsesor,
         porProductoAhorro,
+        porTipoPrestamo,
         bancosManual: bancosRows,
         evolutivo: serieEvolutivaFinal
       });
@@ -37778,6 +38022,9 @@ router18.post(
           ([Periodo], [Fecha_Corte], [Entidad_Bancaria], [Moneda], [Saldo_Banco], [TEA_Pasiva_Banco], [Observacion], [Usuario_Registro], [Fecha_Actualizacion])
         VALUES
           (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
+
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
       `);
       res.json({ ok: true });
     } catch (error2) {
@@ -37796,6 +38043,9 @@ router18.delete(
       await request.query(`
         DELETE FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual]
         WHERE [Id] = @id;
+
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
       `);
       res.json({ ok: true });
     } catch (error2) {
@@ -37806,33 +38056,655 @@ router18.delete(
 );
 var balanceGerencial_default = router18;
 
-// src/routes/index.ts
+// src/routes/moraProducto.ts
+var import_express19 = __toESM(require_express2(), 1);
+import sql15 from "mssql";
 var router19 = (0, import_express19.Router)();
-router19.use(health_default);
-router19.use(preventiva_default);
-router19.use(filtros_default);
-router19.use(calendario_default);
-router19.use(gerencia_default);
-router19.use(supervision_default);
-router19.use(agencia_default);
-router19.use(asesores_default);
-router19.use(diaria_default);
-router19.use(evolucion_default);
-router19.use(cancelados_default);
-router19.use(avance_default);
-router19.use(ranking_default);
-router19.use(mora_default);
-router19.use(pagosMora_default);
-router19.use(welcome_default);
-router19.use(productividadViva_default);
-router19.use(balanceGerencial_default);
-var routes_default = router19;
+var AGENCY_NAMES2 = {
+  "01": "Wanchaq",
+  "02": "San Jer\xF3nimo",
+  "03": "Quillabamba",
+  "04": "Sicuani",
+  "05": "Molino",
+  "06": "Juliaca",
+  "07": "Lima Los Olivos",
+  "08": "Tica Tica",
+  "09": "Magisterio",
+  "10": "Lima SJL",
+  "11": "Chiclayo",
+  "12": "Arequipa",
+  "13": "Pucallpa",
+  "98": "Agencia Digital (98)"
+};
+var NAME_TO_CODE2 = Object.fromEntries(
+  Object.entries(AGENCY_NAMES2).map(([code, name]) => [name.toLowerCase(), code])
+);
+router19.get(
+  ["/mora-producto", "/api/mora-producto"],
+  async (req, res) => {
+    try {
+      const d = /* @__PURE__ */ new Date();
+      const defaultPer = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const periodo = String(req.query.periodo || defaultPer).trim();
+      const agenciaParam = String(req.query.agencia || "Todas").trim();
+      const areaParam = String(req.query.area || "COMERCIAL").toUpperCase().trim();
+      const productoParam = String(req.query.producto || "Todos").trim();
+      let codAgencia = "";
+      if (agenciaParam !== "Todas" && agenciaParam !== "") {
+        codAgencia = NAME_TO_CODE2[agenciaParam.toLowerCase()] || agenciaParam.padStart(2, "0");
+      }
+      const areaFiltro = areaParam === "TODAS" || areaParam === "TOTAL" ? "" : areaParam;
+      const prodFiltro = productoParam === "Todos" || productoParam === "Todas" ? "" : productoParam;
+      const reqCat = pool.request();
+      reqCat.input("periodo", sql15.VarChar(6), periodo);
+      reqCat.input("area", sql15.VarChar(20), areaFiltro);
+      const resCat = await reqCat.query(`
+        SELECT
+          [Cod_Producto] AS codigo,
+          MAX([Producto]) AS producto,
+          MAX([Tipo_Prestamo]) AS tipoPrestamo,
+          SUM([Cartera_Producto]) AS carteraTotal
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_mora_por_producto] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@area = '' OR [Area_Cartera] = @area)
+        GROUP BY [Cod_Producto]
+        ORDER BY SUM([Mora_CPP_4]) DESC;
+      `);
+      const reqData = pool.request();
+      reqData.input("periodo", sql15.VarChar(6), periodo);
+      reqData.input("agencia", sql15.VarChar(5), codAgencia);
+      reqData.input("area", sql15.VarChar(20), areaFiltro);
+      reqData.input("producto", sql15.VarChar(100), prodFiltro);
+      const resData = await reqData.query(`
+        SELECT
+          [Periodo],
+          [IdSAgencia],
+          [Area_Cartera],
+          [Cod_Tipo_Pres],
+          MAX([Tipo_Prestamo]) AS Tipo_Prestamo,
+          [Cod_Producto],
+          MAX([Producto]) AS Producto,
+          SUM([Nro_Creditos]) AS Nro_Creditos,
+          SUM([Nro_Socios]) AS Nro_Socios,
+          SUM([Cartera_Producto]) AS Cartera,
+          SUM([Mora_1_Dia]) AS Mora_1_Dia,
+          SUM([Mora_CPP_4]) AS Mora_CPP,
+          SUM([Mora_Deficiente_31]) AS Mora_Deficiente,
+          SUM([Mora_150]) AS Mora_150,
+          SUM([Cred_Mora_1_Dia]) AS Cred_Mora_1_Dia,
+          SUM([Cred_Mora_CPP_4]) AS Cred_Mora_CPP,
+          SUM([Cred_Mora_Def_31]) AS Cred_Mora_Deficiente,
+          SUM([Cred_Mora_150]) AS Cred_Mora_150,
+          SUM([Tramo_Al_Dia]) AS Tramo_Al_Dia,
+          SUM([Tramo_1_a_3]) AS Tramo_1_a_3,
+          SUM([Tramo_4_a_8]) AS Tramo_4_a_8,
+          SUM([Tramo_9_a_30]) AS Tramo_9_a_30,
+          SUM([Tramo_31_a_150]) AS Tramo_31_a_150,
+          SUM([Tramo_Mas_150]) AS Tramo_Mas_150,
+          SUM([SBS_Normal]) AS SBS_Normal,
+          SUM([SBS_CPP]) AS SBS_CPP,
+          SUM([SBS_Deficiente]) AS SBS_Deficiente,
+          SUM([SBS_Dudoso]) AS SBS_Dudoso,
+          SUM([SBS_Perdida]) AS SBS_Perdida
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_mora_por_producto] WITH (NOLOCK)
+        WHERE [Periodo] = @periodo
+          AND (@agencia = '' OR [IdSAgencia] = @agencia)
+          AND (@area = '' OR [Area_Cartera] = @area)
+          AND (@producto = '' OR [Cod_Producto] = @producto OR [Producto] = @producto)
+        GROUP BY
+          [Periodo],
+          [IdSAgencia],
+          [Area_Cartera],
+          [Cod_Tipo_Pres],
+          [Cod_Producto];
+      `);
+      const reqEvo = pool.request();
+      reqEvo.input("agencia", sql15.VarChar(5), codAgencia);
+      reqEvo.input("area", sql15.VarChar(20), areaFiltro);
+      reqEvo.input("producto", sql15.VarChar(100), prodFiltro);
+      const resEvo = await reqEvo.query(`
+        SELECT TOP 12
+          [Periodo] AS periodo,
+          SUM([Nro_Creditos]) AS nroCreditos,
+          SUM([Cartera_Producto]) AS cartera,
+          SUM([Mora_1_Dia]) AS mora1Dia,
+          SUM([Mora_CPP_4]) AS moraCpp,
+          SUM([Mora_Deficiente_31]) AS moraDeficiente,
+          SUM([Mora_150]) AS mora150,
+          SUM([Tramo_1_a_3]) AS tramo1a3,
+          SUM([Tramo_4_a_8]) AS tramo4a8,
+          SUM([Tramo_9_a_30]) AS tramo9a30,
+          SUM([Tramo_31_a_150]) AS tramo31a150
+        FROM [DWH_Gestion_Cartera].[dbo].[fct_mora_por_producto] WITH (NOLOCK)
+        WHERE (@agencia = '' OR [IdSAgencia] = @agencia)
+          AND (@area = '' OR [Area_Cartera] = @area)
+          AND (@producto = '' OR [Cod_Producto] = @producto OR [Producto] = @producto)
+        GROUP BY [Periodo]
+        ORDER BY [Periodo] ASC;
+      `);
+      const rows = resData.recordset || [];
+      const evoRaw = resEvo.recordset || [];
+      let totalCartera = 0;
+      let totalCreditos = 0;
+      let totalSocios = 0;
+      let totalMora1Dia = 0;
+      let totalMoraCpp = 0;
+      let totalMoraDef = 0;
+      let totalMora150 = 0;
+      let totalAlDia = 0;
+      let totalT1_3 = 0;
+      let totalT4_8 = 0;
+      let totalT9_30 = 0;
+      let totalT31_150 = 0;
+      const mapProducto = /* @__PURE__ */ new Map();
+      const mapAgencia = /* @__PURE__ */ new Map();
+      const listAgenciaProducto = [];
+      rows.forEach((r) => {
+        const codAge = String(r.IdSAgencia || "01").trim().padStart(2, "0");
+        const nomAge = AGENCY_NAMES2[codAge] || `Agencia ${codAge}`;
+        const codProd = String(r.Cod_Producto || "00").trim();
+        const nomProd = String(r.Producto || "SIN PRODUCTO").trim();
+        const nomTipoPres = String(r.Tipo_Prestamo || "").trim();
+        const cartera = Number(r.Cartera || 0);
+        const creditos = Number(r.Nro_Creditos || 0);
+        const socios = Number(r.Nro_Socios || 0);
+        const m1 = Number(r.Mora_1_Dia || 0);
+        const mCpp = Number(r.Mora_CPP || 0);
+        const mDef = Number(r.Mora_Deficiente || 0);
+        const m150 = Number(r.Mora_150 || 0);
+        const c1 = Number(r.Cred_Mora_1_Dia || 0);
+        const cCpp = Number(r.Cred_Mora_CPP || 0);
+        const cDef = Number(r.Cred_Mora_Deficiente || 0);
+        const c150 = Number(r.Cred_Mora_150 || 0);
+        const t0 = Number(r.Tramo_Al_Dia || 0);
+        const t1_3 = Number(r.Tramo_1_a_3 || 0);
+        const t4_8 = Number(r.Tramo_4_a_8 || 0);
+        const t9_30 = Number(r.Tramo_9_a_30 || 0);
+        const t31_150 = Number(r.Tramo_31_a_150 || 0);
+        const tMas150 = Number(r.Tramo_Mas_150 || 0);
+        totalCartera += cartera;
+        totalCreditos += creditos;
+        totalSocios += socios;
+        totalMora1Dia += m1;
+        totalMoraCpp += mCpp;
+        totalMoraDef += mDef;
+        totalMora150 += m150;
+        totalAlDia += t0;
+        totalT1_3 += t1_3;
+        totalT4_8 += t4_8;
+        totalT9_30 += t9_30;
+        totalT31_150 += t31_150;
+        if (!mapProducto.has(codProd)) {
+          mapProducto.set(codProd, {
+            codProducto: codProd,
+            producto: nomProd,
+            tipoPrestamo: nomTipoPres,
+            nroCreditos: 0,
+            nroSocios: 0,
+            cartera: 0,
+            mora1Dia: 0,
+            moraCpp: 0,
+            moraDeficiente: 0,
+            mora150: 0,
+            credMora1Dia: 0,
+            credMoraCpp: 0,
+            credMoraDef: 0,
+            credMora150: 0,
+            tramoAlDia: 0,
+            tramo1a3: 0,
+            tramo4a8: 0,
+            tramo9a30: 0,
+            tramo31a150: 0,
+            tramoMas150: 0
+          });
+        }
+        const p = mapProducto.get(codProd);
+        p.nroCreditos += creditos;
+        p.nroSocios += socios;
+        p.cartera += cartera;
+        p.mora1Dia += m1;
+        p.moraCpp += mCpp;
+        p.moraDeficiente += mDef;
+        p.mora150 += m150;
+        p.credMora1Dia += c1;
+        p.credMoraCpp += cCpp;
+        p.credMoraDef += cDef;
+        p.credMora150 += c150;
+        p.tramoAlDia += t0;
+        p.tramo1a3 += t1_3;
+        p.tramo4a8 += t4_8;
+        p.tramo9a30 += t9_30;
+        p.tramo31a150 += t31_150;
+        p.tramoMas150 += tMas150;
+        if (!mapAgencia.has(codAge)) {
+          mapAgencia.set(codAge, {
+            idAgencia: codAge,
+            agencia: nomAge,
+            nroCreditos: 0,
+            nroSocios: 0,
+            cartera: 0,
+            mora1Dia: 0,
+            moraCpp: 0,
+            moraDeficiente: 0,
+            mora150: 0,
+            tramoAlDia: 0,
+            tramo1a3: 0,
+            tramo4a8: 0,
+            tramo9a30: 0,
+            tramo31a150: 0,
+            tramoMas150: 0
+          });
+        }
+        const ag = mapAgencia.get(codAge);
+        ag.nroCreditos += creditos;
+        ag.nroSocios += socios;
+        ag.cartera += cartera;
+        ag.mora1Dia += m1;
+        ag.moraCpp += mCpp;
+        ag.moraDeficiente += mDef;
+        ag.mora150 += m150;
+        ag.tramoAlDia += t0;
+        ag.tramo1a3 += t1_3;
+        ag.tramo4a8 += t4_8;
+        ag.tramo9a30 += t9_30;
+        ag.tramo31a150 += t31_150;
+        ag.tramoMas150 += tMas150;
+        listAgenciaProducto.push({
+          idAgencia: codAge,
+          agencia: nomAge,
+          area: r.Area_Cartera,
+          codProducto: codProd,
+          producto: nomProd,
+          tipoPrestamo: nomTipoPres,
+          nroCreditos: creditos,
+          nroSocios: socios,
+          cartera,
+          mora1Dia: m1,
+          pctMora1Dia: cartera > 0 ? Number((m1 / cartera * 100).toFixed(2)) : 0,
+          moraCpp: mCpp,
+          pctMoraCpp: cartera > 0 ? Number((mCpp / cartera * 100).toFixed(2)) : 0,
+          moraDeficiente: mDef,
+          pctMoraDeficiente: cartera > 0 ? Number((mDef / cartera * 100).toFixed(2)) : 0,
+          mora150: m150,
+          pctMora150: cartera > 0 ? Number((m150 / cartera * 100).toFixed(2)) : 0,
+          tramoAlDia: t0,
+          tramo1a3: t1_3,
+          tramo4a8: t4_8,
+          tramo9a30: t9_30,
+          tramo31a150: t31_150,
+          tramoMas150: tMas150
+        });
+      });
+      const porProducto = Array.from(mapProducto.values()).map((p) => ({
+        ...p,
+        pctCarteraShare: totalCartera > 0 ? Number((p.cartera / totalCartera * 100).toFixed(2)) : 0,
+        pctMora1Dia: p.cartera > 0 ? Number((p.mora1Dia / p.cartera * 100).toFixed(2)) : 0,
+        pctMoraCpp: p.cartera > 0 ? Number((p.moraCpp / p.cartera * 100).toFixed(2)) : 0,
+        pctShareMoraCpp: totalMoraCpp > 0 ? Number((p.moraCpp / totalMoraCpp * 100).toFixed(2)) : 0,
+        pctMoraDeficiente: p.cartera > 0 ? Number((p.moraDeficiente / p.cartera * 100).toFixed(2)) : 0,
+        pctShareMoraDef: totalMoraDef > 0 ? Number((p.moraDeficiente / totalMoraDef * 100).toFixed(2)) : 0,
+        pctMora150: p.cartera > 0 ? Number((p.mora150 / p.cartera * 100).toFixed(2)) : 0
+      })).sort((a, b) => b.moraCpp - a.moraCpp);
+      const porAgencia = Array.from(mapAgencia.values()).map((a) => ({
+        ...a,
+        pctMora1Dia: a.cartera > 0 ? Number((a.mora1Dia / a.cartera * 100).toFixed(2)) : 0,
+        pctMoraCpp: a.cartera > 0 ? Number((a.moraCpp / a.cartera * 100).toFixed(2)) : 0,
+        pctShareMoraCpp: totalMoraCpp > 0 ? Number((a.moraCpp / totalMoraCpp * 100).toFixed(2)) : 0,
+        pctMoraDeficiente: a.cartera > 0 ? Number((a.moraDeficiente / a.cartera * 100).toFixed(2)) : 0,
+        pctMora150: a.cartera > 0 ? Number((a.mora150 / a.cartera * 100).toFixed(2)) : 0
+      })).sort((a, b) => a.idAgencia.localeCompare(b.idAgencia));
+      listAgenciaProducto.sort((a, b) => {
+        if (a.idAgencia !== b.idAgencia) return a.idAgencia.localeCompare(b.idAgencia);
+        return b.moraCpp - a.moraCpp;
+      });
+      const evolutivo = evoRaw.map((e) => {
+        const c = Number(e.cartera || 0);
+        const m1 = Number(e.mora1Dia || 0);
+        const mCpp = Number(e.moraCpp || 0);
+        const mDef = Number(e.moraDeficiente || 0);
+        const m150 = Number(e.mora150 || 0);
+        return {
+          periodo: String(e.periodo).trim(),
+          nroCreditos: Number(e.nroCreditos || 0),
+          cartera: c,
+          mora1Dia: m1,
+          moraCpp: mCpp,
+          moraDeficiente: mDef,
+          mora150: m150,
+          pctMora1Dia: c > 0 ? Number((m1 / c * 100).toFixed(2)) : 0,
+          pctMoraCpp: c > 0 ? Number((mCpp / c * 100).toFixed(2)) : 0,
+          pctMoraDeficiente: c > 0 ? Number((mDef / c * 100).toFixed(2)) : 0,
+          pctMora150: c > 0 ? Number((m150 / c * 100).toFixed(2)) : 0,
+          tramo1a3: Number(e.tramo1a3 || 0),
+          tramo4a8: Number(e.tramo4a8 || 0),
+          tramo9a30: Number(e.tramo9a30 || 0),
+          tramo31a150: Number(e.tramo31a150 || 0)
+        };
+      });
+      res.json({
+        periodo,
+        area: areaParam,
+        agencia: agenciaParam,
+        producto: productoParam,
+        catalogoProductos: resCat.recordset || [],
+        kpis: {
+          carteraTotal: totalCartera,
+          nroCreditos: totalCreditos,
+          nroSocios: totalSocios,
+          mora1Dia: totalMora1Dia,
+          pctMora1Dia: totalCartera > 0 ? Number((totalMora1Dia / totalCartera * 100).toFixed(2)) : 0,
+          moraCpp: totalMoraCpp,
+          pctMoraCpp: totalCartera > 0 ? Number((totalMoraCpp / totalCartera * 100).toFixed(2)) : 0,
+          moraDeficiente: totalMoraDef,
+          pctMoraDeficiente: totalCartera > 0 ? Number((totalMoraDef / totalCartera * 100).toFixed(2)) : 0,
+          mora150: totalMora150,
+          pctMora150: totalCartera > 0 ? Number((totalMora150 / totalCartera * 100).toFixed(2)) : 0,
+          tramoAlDia: totalAlDia,
+          tramo1a3: totalT1_3,
+          tramo4a8: totalT4_8,
+          tramo9a30: totalT9_30,
+          tramo31a150: totalT31_150
+        },
+        porProducto,
+        porAgencia,
+        porAgenciaProducto: listAgenciaProducto,
+        evolutivo
+      });
+    } catch (error2) {
+      console.error("Error en /api/mora-producto:", error2);
+      res.status(500).json({ error: "Error al obtener Mora por Producto" });
+    }
+  }
+);
+var moraProducto_default = router19;
+
+// src/routes/plazoFijo.ts
+var import_express20 = __toESM(require_express2(), 1);
+import sql16 from "mssql";
+var router20 = (0, import_express20.Router)();
+var AGENCY_NAMES3 = {
+  "01": "Wanchaq",
+  "02": "San Jer\xF3nimo",
+  "03": "Quillabamba",
+  "04": "Sicuani",
+  "05": "Molino",
+  "06": "Juliaca",
+  "07": "Lima Los Olivos",
+  "08": "Tica Tica",
+  "09": "Magisterio",
+  "10": "Lima SJL",
+  "11": "Chiclayo",
+  "12": "Arequipa",
+  "13": "Pucallpa",
+  "98": "Agencia Digital (98)"
+};
+var NAME_TO_CODE3 = Object.fromEntries(
+  Object.entries(AGENCY_NAMES3).map(([code, name]) => [name.toLowerCase(), code])
+);
+router20.get(
+  ["/plazo-fijo", "/api/plazo-fijo"],
+  async (req, res) => {
+    try {
+      const agenciaParam = String(req.query.agencia || "Todas").trim();
+      const plazoParam = String(req.query.plazo || "Todas").trim();
+      const periodoAperturaParam = String(req.query.periodoApertura || "Todas").trim();
+      const periodoVencimientoParam = String(req.query.periodoVencimiento || "Todas").trim();
+      const universoParam = String(req.query.universo || "CONTABLE_TOTAL").toUpperCase().trim();
+      let codAgencia = "";
+      if (agenciaParam !== "Todas" && agenciaParam !== "") {
+        codAgencia = NAME_TO_CODE3[agenciaParam.toLowerCase()] || agenciaParam.padStart(2, "0");
+      }
+      const plazoFiltro = plazoParam === "Todas" || plazoParam === "Todos" || plazoParam === "" ? 0 : parseInt(plazoParam, 10) || 0;
+      const perAperFiltro = periodoAperturaParam === "Todas" || periodoAperturaParam === "Todos" ? "" : periodoAperturaParam;
+      const perVencFiltro = periodoVencimientoParam === "Todas" || periodoVencimientoParam === "Todos" ? "" : periodoVencimientoParam;
+      const resCatalogos = await pool.request().query(`
+        SELECT DISTINCT [plazo_dias] AS plazo
+        FROM (
+          SELECT [plazo_dias] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vigente] WITH (NOLOCK)
+          UNION
+          SELECT [plazo_dias] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vencido] WITH (NOLOCK)
+        ) P
+        WHERE [plazo_dias] IS NOT NULL AND [plazo_dias] > 0
+        ORDER BY [plazo_dias] ASC;
+
+        SELECT DISTINCT [periodo_apertura] AS periodo
+        FROM (
+          SELECT [periodo_apertura] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vigente] WITH (NOLOCK)
+          UNION
+          SELECT [periodo_apertura] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vencido] WITH (NOLOCK)
+        ) PA
+        WHERE [periodo_apertura] IS NOT NULL AND [periodo_apertura] <> ''
+        ORDER BY [periodo_apertura] DESC;
+
+        SELECT DISTINCT [periodo_vencimiento] AS periodo
+        FROM (
+          SELECT [periodo_vencimiento] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vigente] WITH (NOLOCK)
+          UNION
+          SELECT [periodo_vencimiento] FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vencido] WITH (NOLOCK)
+        ) PV
+        WHERE [periodo_vencimiento] IS NOT NULL AND [periodo_vencimiento] <> ''
+        ORDER BY [periodo_vencimiento] DESC;
+      `);
+      const catSets = resCatalogos.recordsets;
+      const plazosDisponibles = (catSets[0] || []).map((r) => Number(r.plazo));
+      const periodosApertura = (catSets[1] || []).map((r) => String(r.periodo).trim());
+      const periodosVencimiento = (catSets[2] || []).map((r) => String(r.periodo).trim());
+      const reqVig = pool.request();
+      reqVig.input("agencia", sql16.VarChar(5), codAgencia);
+      reqVig.input("plazo", sql16.Int, plazoFiltro);
+      reqVig.input("perAper", sql16.VarChar(10), perAperFiltro);
+      reqVig.input("perVenc", sql16.VarChar(10), perVencFiltro);
+      reqVig.input("soloVigentes", sql16.Bit, universoParam === "SOLO_VIGENTES" ? 1 : 0);
+      const resVig = await reqVig.query(`
+        SELECT
+          RIGHT('00' + LTRIM(RTRIM([IdSAgencia])), 2) AS idAgencia,
+          RIGHT('000000000000' + LTRIM(RTRIM([cuenta])), 12) AS cuenta,
+          LTRIM(RTRIM(ISNULL([nombre_socio], ''))) AS socio,
+          RIGHT('000000000000' + LTRIM(RTRIM([contrato])), 12) AS contrato,
+          LTRIM(RTRIM(ISNULL([tipo_producto], 'DEPOSITO AZUL'))) AS producto,
+          ISNULL([capital], 0) AS capital,
+          ISNULL([tea], 0) AS tea,
+          ISNULL([interes], 0) AS interes,
+          CONVERT(VARCHAR(10), [fecha_apertura], 103) AS fechaApertura,
+          ISNULL([plazo_dias], 0) AS plazo,
+          CONVERT(VARCHAR(10), [fecha_vencimiento], 103) AS fechaVencimiento,
+          ISNULL([periodo_apertura], '') AS periodoApertura,
+          ISNULL([periodo_vencimiento], '') AS periodoVencimiento,
+          ISNULL([estado_plazo], 'VIGENTE') AS estadoPlazo
+        FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vigente] WITH (NOLOCK)
+        WHERE (@agencia = '' OR RIGHT('00' + LTRIM(RTRIM([IdSAgencia])), 2) = @agencia)
+          AND (@plazo = 0 OR [plazo_dias] = @plazo)
+          AND (@perAper = '' OR [periodo_apertura] = @perAper)
+          AND (@perVenc = '' OR [periodo_vencimiento] = @perVenc)
+          AND (@soloVigentes = 0 OR [estado_plazo] = 'VIGENTE')
+        ORDER BY [fecha_apertura] ASC, [contrato] ASC;
+      `);
+      const reqVenc = pool.request();
+      reqVenc.input("agencia", sql16.VarChar(5), codAgencia);
+      reqVenc.input("plazo", sql16.Int, plazoFiltro);
+      reqVenc.input("perAper", sql16.VarChar(10), perAperFiltro);
+      reqVenc.input("perVenc", sql16.VarChar(10), perVencFiltro);
+      const resVenc = await reqVenc.query(`
+        SELECT TOP 2500
+          RIGHT('00' + LTRIM(RTRIM([IdSAgencia])), 2) AS idAgencia,
+          RIGHT('000000000000' + LTRIM(RTRIM([cuenta])), 12) AS cuenta,
+          LTRIM(RTRIM(ISNULL([nombre_socio], ''))) AS socio,
+          RIGHT('000000000000' + LTRIM(RTRIM([contrato])), 12) AS contrato,
+          LTRIM(RTRIM(ISNULL([tipo_producto], 'DEPOSITO AZUL'))) AS producto,
+          LTRIM(RTRIM(ISNULL([contacto], ''))) AS contacto,
+          ISNULL([capital], 0) AS capital,
+          ISNULL([tea], 0) AS tea,
+          ISNULL([interes], 0) AS interes,
+          CONVERT(VARCHAR(10), [fecha_apertura], 103) AS fechaApertura,
+          ISNULL([plazo_dias], 0) AS plazo,
+          CONVERT(VARCHAR(10), [fecha_vencimiento], 103) AS fechaVencimiento,
+          ISNULL([periodo_apertura], '') AS periodoApertura,
+          ISNULL([periodo_vencimiento], '') AS periodoVencimiento
+        FROM [DWH_Gestion_Cartera].[dbo].[fact_plazo_fijo_vencido] WITH (NOLOCK)
+        WHERE (@agencia = '' OR RIGHT('00' + LTRIM(RTRIM([IdSAgencia])), 2) = @agencia)
+          AND (@plazo = 0 OR [plazo_dias] = @plazo)
+          AND (@perAper = '' OR [periodo_apertura] = @perAper)
+          AND (@perVenc = '' OR [periodo_vencimiento] = @perVenc)
+        ORDER BY [fecha_vencimiento] DESC, [capital] DESC;
+      `);
+      const vigentesRows = (resVig.recordset || []).map((r) => ({
+        ...r,
+        agencia: AGENCY_NAMES3[r.idAgencia] || `Agencia ${r.idAgencia}`,
+        capital: Number(r.capital || 0),
+        tea: Number(r.tea || 0),
+        interes: Number(r.interes || 0),
+        plazo: Number(r.plazo || 0)
+      }));
+      const vencidosRows = (resVenc.recordset || []).map((r) => ({
+        ...r,
+        agencia: AGENCY_NAMES3[r.idAgencia] || `Agencia ${r.idAgencia}`,
+        capital: Number(r.capital || 0),
+        tea: Number(r.tea || 0),
+        interes: Number(r.interes || 0),
+        plazo: Number(r.plazo || 0)
+      }));
+      const mapAgencia = /* @__PURE__ */ new Map();
+      let totalCapitalVig = 0;
+      let totalNumTeaVig = 0;
+      let totalInteresVig = 0;
+      vigentesRows.forEach((r) => {
+        totalCapitalVig += r.capital;
+        totalNumTeaVig += r.capital * r.tea;
+        totalInteresVig += r.interes;
+        if (!mapAgencia.has(r.idAgencia)) {
+          mapAgencia.set(r.idAgencia, {
+            idAgencia: r.idAgencia,
+            agencia: r.agencia,
+            capitalTotal: 0,
+            numTea: 0,
+            interesTotal: 0,
+            nroContratos: 0,
+            productosMap: /* @__PURE__ */ new Map()
+          });
+        }
+        const agNode = mapAgencia.get(r.idAgencia);
+        agNode.capitalTotal += r.capital;
+        agNode.numTea += r.capital * r.tea;
+        agNode.interesTotal += r.interes;
+        agNode.nroContratos += 1;
+        if (!agNode.productosMap.has(r.producto)) {
+          agNode.productosMap.set(r.producto, {
+            producto: r.producto,
+            capitalTotal: 0,
+            numTea: 0,
+            interesTotal: 0,
+            nroContratos: 0,
+            plazosMap: /* @__PURE__ */ new Map()
+          });
+        }
+        const prodNode = agNode.productosMap.get(r.producto);
+        prodNode.capitalTotal += r.capital;
+        prodNode.numTea += r.capital * r.tea;
+        prodNode.interesTotal += r.interes;
+        prodNode.nroContratos += 1;
+        if (!prodNode.plazosMap.has(r.plazo)) {
+          prodNode.plazosMap.set(r.plazo, {
+            plazo: r.plazo,
+            capitalTotal: 0,
+            numTea: 0,
+            interesTotal: 0,
+            nroContratos: 0
+          });
+        }
+        const plazoNode = prodNode.plazosMap.get(r.plazo);
+        plazoNode.capitalTotal += r.capital;
+        plazoNode.numTea += r.capital * r.tea;
+        plazoNode.interesTotal += r.interes;
+        plazoNode.nroContratos += 1;
+      });
+      const matrizJerarquica = Array.from(mapAgencia.values()).map((ag) => ({
+        idAgencia: ag.idAgencia,
+        agencia: ag.agencia,
+        capitalTotal: Number(ag.capitalTotal.toFixed(2)),
+        teaPonderada: Number(
+          (ag.capitalTotal > 0 ? ag.numTea / ag.capitalTotal : 0).toFixed(2)
+        ),
+        interesTotal: Number(ag.interesTotal.toFixed(2)),
+        nroContratos: ag.nroContratos,
+        productos: Array.from(ag.productosMap.values()).map((pr) => ({
+          producto: pr.producto,
+          capitalTotal: Number(pr.capitalTotal.toFixed(2)),
+          teaPonderada: Number(
+            (pr.capitalTotal > 0 ? pr.numTea / pr.capitalTotal : 0).toFixed(2)
+          ),
+          interesTotal: Number(pr.interesTotal.toFixed(2)),
+          nroContratos: pr.nroContratos,
+          plazos: Array.from(pr.plazosMap.values()).map((pl) => ({
+            plazo: pl.plazo,
+            capitalTotal: Number(pl.capitalTotal.toFixed(2)),
+            teaPonderada: Number(
+              (pl.capitalTotal > 0 ? pl.numTea / pl.capitalTotal : 0).toFixed(2)
+            ),
+            interesTotal: Number(pl.interesTotal.toFixed(2)),
+            nroContratos: pl.nroContratos
+          })).sort((a, b) => b.capitalTotal - a.capitalTotal)
+        })).sort((a, b) => a.producto.localeCompare(b.producto))
+      })).sort((a, b) => b.capitalTotal - a.capitalTotal);
+      const totalCapitalVenc = vencidosRows.reduce((s, r) => s + r.capital, 0);
+      const totalInteresVenc = vencidosRows.reduce((s, r) => s + r.interes, 0);
+      res.json({
+        kpis: {
+          capitalTotalVigentes: Number(totalCapitalVig.toFixed(2)),
+          teaPonderadaVigentes: Number(
+            (totalCapitalVig > 0 ? totalNumTeaVig / totalCapitalVig : 0).toFixed(2)
+          ),
+          interesTotalVigentes: Number(totalInteresVig.toFixed(2)),
+          nroContratosVigentes: vigentesRows.length,
+          capitalTotalVencidos: Number(totalCapitalVenc.toFixed(2)),
+          interesTotalVencidos: Number(totalInteresVenc.toFixed(2)),
+          nroContratosVencidos: vencidosRows.length
+        },
+        filtros: {
+          plazos: plazosDisponibles,
+          periodosApertura,
+          periodosVencimiento
+        },
+        matrizJerarquica,
+        vigentes: vigentesRows,
+        vencidos: vencidosRows
+      });
+    } catch (error2) {
+      console.error("Error en /api/plazo-fijo:", error2);
+      res.status(500).json({ error: "Error obteniendo datos de Plazo Fijo" });
+    }
+  }
+);
+var plazoFijo_default = router20;
+
+// src/routes/index.ts
+var router21 = (0, import_express21.Router)();
+router21.use(health_default);
+router21.use(preventiva_default);
+router21.use(filtros_default);
+router21.use(calendario_default);
+router21.use(gerencia_default);
+router21.use(supervision_default);
+router21.use(agencia_default);
+router21.use(asesores_default);
+router21.use(diaria_default);
+router21.use(evolucion_default);
+router21.use(cancelados_default);
+router21.use(avance_default);
+router21.use(ranking_default);
+router21.use(mora_default);
+router21.use(pagosMora_default);
+router21.use(welcome_default);
+router21.use(productividadViva_default);
+router21.use(balanceGerencial_default);
+router21.use(moraProducto_default);
+router21.use(plazoFijo_default);
+var routes_default = router21;
 
 // src/app.ts
-var app = (0, import_express20.default)();
+var app = (0, import_express22.default)();
 app.set("etag", false);
 app.use((0, import_cors.default)());
-app.use(import_express20.default.json());
+app.use(import_express22.default.json());
 app.use(smartCacheMiddleware);
 startCacheWatcher();
 app.get("/health", (req, res) => {

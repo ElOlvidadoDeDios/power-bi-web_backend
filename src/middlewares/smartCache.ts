@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { pool } from "../lib/db";
 
-export type BucketName = "etl" | "gerencial" | "ranking" | "mora" | "vivo";
+export type BucketName = "etl" | "gerencial" | "ranking" | "mora" | "vivo" | "balance";
 
 interface CacheBucket {
   idLog: number;
@@ -29,7 +29,7 @@ const buckets: Record<BucketName, CacheBucket> = {
     name: "gerencial",
     version: "",
     lastFormattedDate: "Sincronizando...",
-    description: "Actualizador Gerencial (Cancelados y Avance)",
+    description: "Actualizador Gerencial (Cancelados y Avance de Cartera)",
     store: new Map(),
     knownRoutes: new Set(),
   },
@@ -47,9 +47,9 @@ const buckets: Record<BucketName, CacheBucket> = {
     name: "mora",
     version: "",
     lastFormattedDate: "Sincronizando...",
-    description: "Motor de Mora, Compromisos e IA Preventiva",
+    description: "Motor de Mora, Productos, Compromisos e IA Preventiva",
     store: new Map(),
-    knownRoutes: new Set(["/api/mora", "/api/pagos-mora"]),
+    knownRoutes: new Set(["/api/mora", "/api/pagos-mora", "/api/mora-producto"]),
   },
   vivo: {
     idLog: 5,
@@ -60,30 +60,40 @@ const buckets: Record<BucketName, CacheBucket> = {
     store: new Map(),
     knownRoutes: new Set(["/api/productividad-en-vivo"]),
   },
+  balance: {
+    idLog: 6,
+    name: "balance",
+    version: "",
+    lastFormattedDate: "Sincronizando...",
+    description: "Balance Gerencial (Ahorros, Aportes, Plazo Fijo, Caja 020 y Bancos)",
+    store: new Map(),
+    knownRoutes: new Set(["/api/balance-gerencial", "/api/plazo-fijo"]),
+  },
 };
 
-let lastKnownBaseUrl = `http://localhost:${process.env.PORT || 3000}`;
+const defaultInternalUrl =
+  process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+let lastKnownBaseUrl = defaultInternalUrl;
 let isChecking = false;
 
-// Clasifica cada petición entrante en su propio caché independiente
 export function resolveBucket(path: string): CacheBucket {
   const p = path.toLowerCase();
-  if (p.includes("productividad-en-vivo")) {
-    return buckets.vivo;
-  }
-  if (p.includes("cancelados") || p.includes("avance")) {
-    return buckets.gerencial;
-  }
-  if (p.includes("ranking")) {
-    return buckets.ranking;
-  }
-  if (p.includes("mora") || p.includes("preventiva")) {
-    return buckets.mora;
-  }
+  if (p.includes("productividad-en-vivo")) return buckets.vivo;
+  if (p.includes("balance-gerencial") || p.includes("plazo-fijo")) return buckets.balance;
+  if (p.includes("cancelados") || p.includes("avance")) return buckets.gerencial;
+  if (p.includes("ranking")) return buckets.ranking;
+  if (p.includes("mora") || p.includes("preventiva")) return buckets.mora;
   return buckets.etl;
 }
 
-// Lee los 5 registros de Log_Actualizacion en 1 sola consulta ligera
+export function invalidateCacheBucket(bucketName?: BucketName) {
+  if (!bucketName) {
+    Object.values(buckets).forEach((b) => b.store.clear());
+    return;
+  }
+  buckets[bucketName]?.store.clear();
+}
+
 async function syncVersionsFromDatabase(): Promise<boolean> {
   try {
     const result = await pool.request().query(`
@@ -93,7 +103,7 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
         FORMAT([UltimaActualizacion], 'dd/MM/yyyy · HH:mm:ss', 'es-PE') AS FechaFormateada,
         ISNULL([Descripcion], '') AS Descripcion
       FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      WHERE [Id] IN (1, 2, 3, 4, 5)
+      WHERE [Id] IN (1, 2, 3, 4, 5, 6)
     `);
 
     const rows = result.recordset || [];
@@ -102,7 +112,7 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
 
     let anyChanged = false;
 
-    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo"] as BucketName[]) {
+    for (const key of ["etl", "gerencial", "ranking", "mora", "vivo", "balance"] as BucketName[]) {
       const bucket = buckets[key];
       const row = mapById.get(bucket.idLog);
       if (!row) continue;
@@ -164,15 +174,13 @@ export function startCacheWatcher() {
   };
 
   setTimeout(checkLoop, 1000);
-  setInterval(checkLoop, 10000); // Revisa Log_Actualizacion cada 10s (consulta de 5 filas en <1ms)
+  setInterval(checkLoop, 10000);
 }
 
-// Firma de 5 partes: etl|gerencial|ranking|mora|vivo
 export function getCombinedVersionSignature(): string {
-  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}`;
+  return `${buckets.etl.version}|${buckets.gerencial.version}|${buckets.ranking.version}|${buckets.mora.version}|${buckets.vivo.version}|${buckets.balance.version}`;
 }
 
-// Devuelve el estado detallado de los 5 logs para el frontend sin golpear la BD
 export function getLogsStatusByBucket() {
   return {
     etl: {
@@ -210,17 +218,36 @@ export function getLogsStatusByBucket() {
       etiqueta: `Productividad en Vivo (Transacmif): ${buckets.vivo.lastFormattedDate}`,
       version: buckets.vivo.version,
     },
+    balance: {
+      id: 6,
+      descripcion: buckets.balance.description,
+      fechaHora: buckets.balance.lastFormattedDate,
+      etiqueta: `Balance Gerencial y Plazo Fijo: ${buckets.balance.lastFormattedDate}`,
+      version: buckets.balance.version,
+    },
   };
 }
 
 export async function smartCacheMiddleware(req: Request, res: Response, next: NextFunction) {
-  if (req.method !== "GET" || req.path.includes("health")) {
+  const host = req.headers.host;
+  if (host && !process.env.INTERNAL_API_URL) {
+    lastKnownBaseUrl = `http://127.0.0.1:${host.split(":")[1] || process.env.PORT || 3000}`;
+  }
+
+  // Si es una petición POST, PUT o DELETE, limpiamos inmediatamente el bucket afectado tras completarse
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const target = resolveBucket(req.path);
+        target.store.clear();
+        syncVersionsFromDatabase().catch(() => {});
+      }
+    });
     return next();
   }
 
-  const host = req.headers.host;
-  if (host) {
-    lastKnownBaseUrl = `http://localhost:${host.split(":")[1] || process.env.PORT || 3000}`;
+  if (req.path.includes("health")) {
+    return next();
   }
 
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -229,11 +256,9 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
 
   if (req.path.endsWith("/cache-clear")) {
     Object.values(buckets).forEach((b) => b.store.clear());
-    return res.json({ ok: true, message: "Los 5 cachés fueron limpiados manualmente" });
+    return res.json({ ok: true, message: "Los 6 cachés fueron limpiados manualmente" });
   }
 
-  // ⚠️ IMPORTANTE: /api/filtros NUNCA debe quedarse congelado en un solo bucket,
-  // porque transporta las firmas en vivo de los 5 buckets hacia el navegador.
   if (req.path.includes("/filtros")) {
     return next();
   }
@@ -254,7 +279,7 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
       if (
-        activeBucket.knownRoutes.size < 20 &&
+        activeBucket.knownRoutes.size < 25 &&
         req.originalUrl &&
         (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))
       ) {

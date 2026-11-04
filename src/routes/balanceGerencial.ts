@@ -22,6 +22,22 @@ const AGENCY_NAMES: Record<string, string> = {
   "98": "Agencia Digital (98)",
 };
 
+// Regla institucional:
+// - APORTES (Cuenta Contable 31110101): Tipo_Aho = '01' (101, 102, 103) + ('09','102' AHORRO PRES)
+// - EXCLUIDO DE TODOS LOS REPORTES: ('09','101' DESEMBOLSO CREDITO - Cuenta 29180702)
+// - AHORROS: Todos los demás subtipos distintos de '03' (DPF) y distintos de Aportes
+const esSubtipoAporte = (tipoAho: string, subtipoAho: string): boolean => {
+  const t = String(tipoAho || "").trim();
+  const s = String(subtipoAho || "").trim();
+  return t === "01" || (t === "09" && s === "102");
+};
+
+const esSubtipoExcluido = (tipoAho: string, subtipoAho: string): boolean => {
+  const t = String(tipoAho || "").trim();
+  const s = String(subtipoAho || "").trim();
+  return t === "09" && s === "101";
+};
+
 // ============================================================================
 // GET /api/balance-gerencial
 // ============================================================================
@@ -37,12 +53,36 @@ router.get(
       const asesorFiltro = String(req.query.asesor || "Todos").trim();
       const fechaFiltro = String(req.query.fecha || "CIERRE").trim();
 
-      // Selector de moneda: 'MN' | 'ME' | 'CONSOLIDADO'
       const rawMoneda = String(req.query.moneda || "MN").toUpperCase().trim();
       const monedaFiltro: "MN" | "ME" | "CONSOLIDADO" =
         rawMoneda === "ME" || rawMoneda === "CONSOLIDADO" ? rawMoneda : "MN";
 
-      // 1. Obtener únicamente los periodos ejecutados en fct_gerencia_ahorros_stock
+      const rawTipoCap = String(req.query.tipoCaptacion || "COMBINADO").toUpperCase().trim();
+      const tipoCaptacion: "COMBINADO" | "AHORROS" | "APORTES" =
+        rawTipoCap === "AHORROS" || rawTipoCap === "APORTES" ? rawTipoCap : "COMBINADO";
+
+      // Condiciones SQL para excluir siempre 09-101 y separar Aportes (01 + 09-102) de Ahorros
+      const sqlExcluir09101Stock = `AND NOT (LTRIM(RTRIM(S.[Tipo_Aho])) = '09' AND LTRIM(RTRIM(S.[Subtipo_Aho])) = '101')`;
+      const sqlExcluir09101Flujo = `AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')`;
+
+      const sqlCondAporteStock = `(LTRIM(RTRIM(S.[Tipo_Aho])) = '01' OR (LTRIM(RTRIM(S.[Tipo_Aho])) = '09' AND LTRIM(RTRIM(S.[Subtipo_Aho])) = '102'))`;
+      const sqlCondAporteFlujo = `(LTRIM(RTRIM([Tipo_Aho])) = '01' OR (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '102'))`;
+
+      const sqlFiltroCapStock =
+        tipoCaptacion === "APORTES"
+          ? `WHEN ${sqlCondAporteStock}`
+          : tipoCaptacion === "AHORROS"
+          ? `WHEN LTRIM(RTRIM(S.[Tipo_Aho])) <> '03' AND NOT ${sqlCondAporteStock}`
+          : `WHEN LTRIM(RTRIM(S.[Tipo_Aho])) <> '03'`;
+
+      const sqlFiltroCapFlujo =
+        tipoCaptacion === "APORTES"
+          ? `WHEN ${sqlCondAporteFlujo}`
+          : tipoCaptacion === "AHORROS"
+          ? `WHEN LTRIM(RTRIM([Tipo_Aho])) <> '03' AND NOT ${sqlCondAporteFlujo}`
+          : `WHEN LTRIM(RTRIM([Tipo_Aho])) <> '03'`;
+
+      // 1. Obtener periodos ejecutados
       const resPeriodos = await pool.request().query(`
         SELECT DISTINCT [Periodo]
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
@@ -87,7 +127,7 @@ router.get(
         codAgenciaFiltro = foundEntry ? foundEntry[0] : agenciaFiltro;
       }
 
-      // 3. Consultar Stock de Ahorros y Plazo Fijo
+      // 3. Consultar Stock de Ahorros, Aportes y Plazo Fijo (excluyendo siempre 09-101)
       const reqAho = pool.request();
       reqAho.input("periodo", sql.VarChar(6), periodo);
       reqAho.input("fecha", sql.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
@@ -111,10 +151,10 @@ router.get(
           ${colAgencia} AS IdSAgencia,
           [IdSAsesor],
           MAX([Nombre_Usuario]) AS Nombre_Usuario,
-          [Tipo_Aho],
-          [Subtipo_Aho],
+          LTRIM(RTRIM([Tipo_Aho])) AS Tipo_Aho,
+          LTRIM(RTRIM([Subtipo_Aho])) AS Subtipo_Aho,
           MAX([Nombre_Producto]) AS Nombre_Producto,
-          [Moneda],
+          LTRIM(RTRIM([Moneda])) AS Moneda,
           MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
           SUM([Nro_Cuentas]) AS Nro_Cuentas,
           SUM([Saldo_Total]) AS Saldo_Original,
@@ -122,13 +162,14 @@ router.get(
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] WITH (NOLOCK)
         WHERE [Periodo] = @periodo
           AND (@FechaStock IS NULL OR [Fecha_Corte] = @FechaStock)
+          AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')
           AND (@agencia = '' OR ${colAgencia} = @agencia)
           AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
           AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
-        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+        GROUP BY ${colAgencia}, [IdSAsesor], LTRIM(RTRIM([Tipo_Aho])), LTRIM(RTRIM([Subtipo_Aho])), LTRIM(RTRIM([Moneda]));
       `;
 
-      // 4. Consultar Flujo de Ahorros
+      // 4. Consultar Flujo de Ahorros y Aportes (excluyendo siempre 09-101)
       const reqFlujo = pool.request();
       reqFlujo.input("periodo", sql.VarChar(6), periodo);
       reqFlujo.input("fecha", sql.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
@@ -141,10 +182,10 @@ router.get(
           ${colAgencia} AS IdSAgencia,
           [IdSAsesor],
           MAX([Nombre_Usuario]) AS Nombre_Usuario,
-          [Tipo_Aho],
-          [Subtipo_Aho],
+          LTRIM(RTRIM([Tipo_Aho])) AS Tipo_Aho,
+          LTRIM(RTRIM([Subtipo_Aho])) AS Subtipo_Aho,
           MAX([Nombre_Producto]) AS Nombre_Producto,
-          [Moneda],
+          LTRIM(RTRIM([Moneda])) AS Moneda,
           MAX(ISNULL([Tipo_Cambio], 1.0000)) AS Tipo_Cambio,
           SUM([Monto_Depositos]) AS Monto_Depositos,
           SUM([Monto_Retiros]) AS Monto_Retiros,
@@ -153,10 +194,11 @@ router.get(
         FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
         WHERE [Periodo] = @periodo
           AND (@fecha = '' OR [Fecha_Mov] = CAST(@fecha AS DATE))
+          AND NOT (LTRIM(RTRIM([Tipo_Aho])) = '09' AND LTRIM(RTRIM([Subtipo_Aho])) = '101')
           AND (@agencia = '' OR ${colAgencia} = @agencia)
           AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Usuario] = @asesor)
           AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
-        GROUP BY ${colAgencia}, [IdSAsesor], [Tipo_Aho], [Subtipo_Aho], [Moneda];
+        GROUP BY ${colAgencia}, [IdSAsesor], LTRIM(RTRIM([Tipo_Aho])), LTRIM(RTRIM([Subtipo_Aho])), LTRIM(RTRIM([Moneda]));
       `;
 
       // 5. Consultar Saldo de Colocaciones y TEA Activa
@@ -212,6 +254,7 @@ router.get(
 
         SELECT
           [IdSAgencia_Origen] AS IdSAgencia,
+          MAX(ISNULL([Tipo_Cambio], 0)) AS Tipo_Cambio,
           SUM([Saldo_Inicial_MN]) AS Saldo_Inicial_MN,
           SUM([Total_Ingresos_MN]) AS Total_Ingresos_MN,
           SUM([Total_Egresos_MN]) AS Total_Egresos_MN,
@@ -258,7 +301,7 @@ router.get(
       reqEvo.input("todoPreec", sql.Bit, incluirTodoPreec ? 1 : 0);
       reqEvo.input("moneda", sql.VarChar(15), monedaFiltro);
 
-      const exprFactorTC = `CASE WHEN [Moneda] = 'ME' THEN ISNULL([Tipo_Cambio], 3.75) ELSE 1.0 END`;
+      const exprFactorTC = `CASE WHEN [Moneda] = 'ME' THEN ISNULL([Tipo_Cambio], 3.433) ELSE 1.0 END`;
 
       const queryEvolutivo =
         granularidad === "Mensual"
@@ -281,11 +324,12 @@ router.get(
         AhoMes AS (
           SELECT
             S.[Periodo] AS Etiqueta,
-            SUM(CASE WHEN S.[Tipo_Aho] <> '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Ahorros,
-            SUM(CASE WHEN S.[Tipo_Aho] = '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Plazo_Fijo,
+            SUM(CASE ${sqlFiltroCapStock} THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Ahorros,
+            SUM(CASE WHEN LTRIM(RTRIM(S.[Tipo_Aho])) = '03' THEN S.[Saldo_Total] * (${exprFactorTC}) ELSE 0 END) AS Saldo_Plazo_Fijo,
             SUM(S.[Numerador_Saldo_x_TEA] * (${exprFactorTC})) / NULLIF(SUM(S.[Saldo_Total] * (${exprFactorTC})), 0) AS TEA_Pasiva
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_stock] S WITH (NOLOCK)
           WHERE S.[Es_Foto_Actual] = 1
+            ${sqlExcluir09101Stock}
             AND (@agencia = '' OR S.${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR S.[Moneda] = @moneda)
           GROUP BY S.[Periodo]
@@ -296,7 +340,9 @@ router.get(
             SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
             SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
-          WHERE (@agencia = '' OR ${colAgencia} = @agencia)
+          WHERE 1 = 1
+            ${sqlExcluir09101Flujo}
+            AND (@agencia = '' OR ${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
           GROUP BY [Periodo]
         ),
@@ -346,10 +392,11 @@ router.get(
             CONVERT(VARCHAR(10), [Fecha_Mov], 23) AS Etiqueta,
             SUM([Monto_Depositos] * (${exprFactorTC})) AS Depositos,
             SUM([Monto_Retiros] * (${exprFactorTC})) AS Retiros,
-            SUM(CASE WHEN [Tipo_Aho] <> '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_Ahorros,
-            SUM(CASE WHEN [Tipo_Aho] = '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_PF
+            SUM(CASE ${sqlFiltroCapFlujo} THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_Ahorros,
+            SUM(CASE WHEN LTRIM(RTRIM([Tipo_Aho])) = '03' THEN ([Monto_Depositos] - [Monto_Retiros]) * (${exprFactorTC}) ELSE 0 END) AS Delta_PF
           FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_ahorros_flujo] WITH (NOLOCK)
           WHERE [Periodo] = @periodo
+            ${sqlExcluir09101Flujo}
             AND (@agencia = '' OR ${colAgencia} = @agencia)
             AND (@moneda = 'CONSOLIDADO' OR [Moneda] = @moneda)
           GROUP BY CONVERT(VARCHAR(10), [Fecha_Mov], 23)
@@ -409,11 +456,86 @@ router.get(
       const bancosRows = resBancos.recordset || [];
       const evoRows = resEvo.recordset || [];
 
-      let tipoCambioPeriodo = 3.75;
+      // 9. Consultar Reclasificación de Colocaciones desde el DWH local (CERO conexión a TRANSACMIF)
+      let porTipoPrestamo: any[] = [];
+      try {
+        const reqPres = pool.request();
+        reqPres.input("periodo", sql.VarChar(6), periodo);
+        reqPres.input("fecha", sql.VarChar(10), tieneFechaExacta ? fechaFiltro : "");
+        reqPres.input("agencia", sql.VarChar(10), codAgenciaFiltro);
+        reqPres.input("asesor", sql.VarChar(50), asesorFiltro === "Todos" ? "" : asesorFiltro);
+        reqPres.input("todoPreec", sql.Bit, incluirTodoPreec ? 1 : 0);
+
+        const resPres = await reqPres.query(`
+          IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo]', 'U') IS NOT NULL
+          BEGIN
+            DECLARE @FechaColocTipo DATE;
+            IF @fecha <> '' AND EXISTS (
+              SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE)
+            )
+              SELECT @FechaColocTipo = MAX([Fecha_Corte])
+              FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo AND [Fecha_Corte] <= CAST(@fecha AS DATE);
+            ELSE
+              SELECT @FechaColocTipo = MAX([Fecha_Corte])
+              FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+              WHERE [Periodo] = @periodo;
+
+            SELECT
+              ISNULL(LTRIM(RTRIM([Cod_Tipo_Pres])), '00') AS codTipo,
+              ISNULL(LTRIM(RTRIM([Tipo_Prestamo])), 'OTROS') AS tipoPrestamo,
+              SUM([Nro_Creditos]) AS nroCreditos,
+              SUM([Saldo_Colocaciones]) AS saldoColocaciones,
+              SUM([Saldo_Vigente]) AS saldoVigente,
+              SUM([Saldo_Refinanciado]) AS saldoRefinanciado,
+              SUM([Saldo_Judicial]) AS saldoJudicial,
+              SUM([Saldo_Vencido]) AS saldoVencido,
+              SUM([Numerador_Saldo_x_TEA]) AS numeradorTea
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_colocaciones_tipo] WITH (NOLOCK)
+            WHERE [Periodo] = @periodo
+              AND (@FechaColocTipo IS NULL OR [Fecha_Corte] = @FechaColocTipo)
+              AND (@todoPreec = 1 OR [Es_Cartera_Comercial] = 1)
+              AND (@agencia = '' OR ${colAgencia} = @agencia)
+              AND (@asesor = '' OR [IdSAsesor] = @asesor OR [Nombre_Asesor] = @asesor)
+            GROUP BY [Cod_Tipo_Pres], [Tipo_Prestamo]
+            ORDER BY saldoColocaciones DESC;
+          END
+        `);
+
+        porTipoPrestamo = (resPres.recordset || []).map((r: any) => {
+          const saldo = Number(r.saldoColocaciones || 0);
+          const venc = Number(r.saldoVencido || 0) + Number(r.saldoJudicial || 0);
+          return {
+            codTipo: r.codTipo,
+            tipoPrestamo: r.tipoPrestamo,
+            nroCreditos: Number(r.nroCreditos || 0),
+            saldoColocaciones: saldo,
+            saldoVigente: Number(r.saldoVigente || 0),
+            saldoRefinanciado: Number(r.saldoRefinanciado || 0),
+            saldoJudicial: Number(r.saldoJudicial || 0),
+            saldoVencido: Number(r.saldoVencido || 0),
+            pctMora: saldo > 0 ? Number(((venc / saldo) * 100).toFixed(2)) : 0,
+            teaPonderada: Number((saldo > 0 ? Number(r.numeradorTea || 0) / saldo : 0).toFixed(2)),
+          };
+        });
+      } catch (errTipo) {
+        console.warn("Aviso leyendo fct_gerencia_colocaciones_tipo en DWH:", errTipo);
+      }
+
+      let tipoCambioPeriodo = 0;
       for (const r of ahoRows) {
-        if (String(r.Moneda).trim() === "ME" && Number(r.Tipo_Cambio) > 1) {
+        if (String(r.Moneda).trim() === "ME" && Number(r.Tipo_Cambio) > 0) {
           tipoCambioPeriodo = Number(r.Tipo_Cambio);
           break;
+        }
+      }
+      if (tipoCambioPeriodo === 0 && cajaRows.length > 0) {
+        for (const c of cajaRows) {
+          if (Number(c.Tipo_Cambio) > 0) {
+            tipoCambioPeriodo = Number(c.Tipo_Cambio);
+            break;
+          }
         }
       }
 
@@ -431,6 +553,12 @@ router.get(
             saldoAhorrosUSD: 0,
             saldoAhorrosUSD_Soles: 0,
             numTeaAhorros: 0,
+            saldoSoloAhorros: 0,
+            saldoSoloAhorrosUSD: 0,
+            numTeaSoloAhorros: 0,
+            saldoSoloAportes: 0,
+            saldoSoloAportesUSD: 0,
+            numTeaSoloAportes: 0,
             saldoPlazoFijo: 0,
             saldoPlazoFijoUSD: 0,
             saldoPlazoFijoUSD_Soles: 0,
@@ -462,6 +590,10 @@ router.get(
             saldoAhorrosUSD: 0,
             saldoAhorrosUSD_Soles: 0,
             numTeaAhorros: 0,
+            saldoSoloAhorros: 0,
+            numTeaSoloAhorros: 0,
+            saldoSoloAportes: 0,
+            numTeaSoloAportes: 0,
             saldoPlazoFijo: 0,
             saldoPlazoFijoUSD: 0,
             saldoPlazoFijoUSD_Soles: 0,
@@ -481,18 +613,38 @@ router.get(
       let kpiSaldoAhorrosUSD_EnSoles = 0;
       let kpiNumTeaAhorros = 0;
 
+      // Desglose permanente separado:
+      // 1) Solo Ahorros (sin 01, sin 09-102 y sin 09-101)
+      let kpiSoloAhorrosSoles = 0;
+      let kpiSoloAhorrosUSD = 0;
+      let kpiSoloAhorrosUSD_EnSoles = 0;
+      let kpiNumTeaSoloAhorros = 0;
+
+      // 2) Solo Aportes (01-101, 01-102, 01-103 + 09-102 Ahorro Pres)
+      let kpiSoloAportesSoles = 0;
+      let kpiSoloAportesUSD = 0;
+      let kpiSoloAportesUSD_EnSoles = 0;
+      let kpiNumTeaSoloAportes = 0;
+
       let kpiSaldoPFSoles = 0;
       let kpiSaldoPFUSD = 0;
       let kpiSaldoPFUSD_EnSoles = 0;
       let kpiNumTeaPF = 0;
 
       ahoRows.forEach((r: any) => {
+        const tipoAho = String(r.Tipo_Aho || "").trim();
+        const subtipoAho = String(r.Subtipo_Aho || "").trim();
+
+        // Excluir terminantemente 09-101 (29180702 DESEMBOLSO CREDITO)
+        if (esSubtipoExcluido(tipoAho, subtipoAho)) return;
+
         const esME = String(r.Moneda).trim() === "ME";
         const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1.0;
         const saldoOrig = Number(r.Saldo_Original || 0);
         const saldoEnSoles = esME ? saldoOrig * tc : saldoOrig;
         const numTeaEnSoles = Number(r.Numerador_TEA_Original || 0) * tc;
-        const esPF = String(r.Tipo_Aho).trim() === "03";
+        const esPF = tipoAho === "03";
+        const esAporte = esSubtipoAporte(tipoAho, subtipoAho);
 
         const ag = ensureAgencia(r.IdSAgencia);
         const as = ensureAsesor(r.IdSAsesor, r.Nombre_Usuario, r.IdSAgencia);
@@ -514,47 +666,89 @@ router.get(
             as.saldoPlazoFijoUSD_Soles += saldoEnSoles;
           }
         } else {
-          kpiSaldoAhorrosSoles += saldoEnSoles;
-          kpiNumTeaAhorros += numTeaEnSoles;
-          ag.saldoAhorros += saldoEnSoles;
-          ag.numTeaAhorros += numTeaEnSoles;
-          as.saldoAhorros += saldoEnSoles;
-          as.numTeaAhorros += numTeaEnSoles;
+          if (esAporte) {
+            kpiSoloAportesSoles += saldoEnSoles;
+            kpiNumTeaSoloAportes += numTeaEnSoles;
+            ag.saldoSoloAportes += saldoEnSoles;
+            ag.numTeaSoloAportes += numTeaEnSoles;
+            as.saldoSoloAportes += saldoEnSoles;
+            as.numTeaSoloAportes += numTeaEnSoles;
+            if (esME) {
+              kpiSoloAportesUSD += saldoOrig;
+              kpiSoloAportesUSD_EnSoles += saldoEnSoles;
+              ag.saldoSoloAportesUSD += saldoOrig;
+            }
+          } else {
+            kpiSoloAhorrosSoles += saldoEnSoles;
+            kpiNumTeaSoloAhorros += numTeaEnSoles;
+            ag.saldoSoloAhorros += saldoEnSoles;
+            ag.numTeaSoloAhorros += numTeaEnSoles;
+            as.saldoSoloAhorros += saldoEnSoles;
+            as.numTeaSoloAhorros += numTeaEnSoles;
+            if (esME) {
+              kpiSoloAhorrosUSD += saldoOrig;
+              kpiSoloAhorrosUSD_EnSoles += saldoEnSoles;
+              ag.saldoSoloAhorrosUSD += saldoOrig;
+            }
+          }
 
-          if (esME) {
-            kpiSaldoAhorrosUSD += saldoOrig;
-            kpiSaldoAhorrosUSD_EnSoles += saldoEnSoles;
-            ag.saldoAhorrosUSD += saldoOrig;
-            ag.saldoAhorrosUSD_Soles += saldoEnSoles;
-            as.saldoAhorrosUSD += saldoOrig;
-            as.saldoAhorrosUSD_Soles += saldoEnSoles;
+          const incluirEnActivo =
+            tipoCaptacion === "COMBINADO" ||
+            (tipoCaptacion === "APORTES" && esAporte) ||
+            (tipoCaptacion === "AHORROS" && !esAporte);
+
+          if (incluirEnActivo) {
+            kpiSaldoAhorrosSoles += saldoEnSoles;
+            kpiNumTeaAhorros += numTeaEnSoles;
+            ag.saldoAhorros += saldoEnSoles;
+            ag.numTeaAhorros += numTeaEnSoles;
+            as.saldoAhorros += saldoEnSoles;
+            as.numTeaAhorros += numTeaEnSoles;
+
+            if (esME) {
+              kpiSaldoAhorrosUSD += saldoOrig;
+              kpiSaldoAhorrosUSD_EnSoles += saldoEnSoles;
+              ag.saldoAhorrosUSD += saldoOrig;
+              ag.saldoAhorrosUSD_Soles += saldoEnSoles;
+              as.saldoAhorrosUSD += saldoOrig;
+              as.saldoAhorrosUSD_Soles += saldoEnSoles;
+            }
           }
         }
 
-        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
-        if (!productoMap.has(prodKey)) {
-          productoMap.set(prodKey, {
-            codigo: prodKey,
-            tipoAho: r.Tipo_Aho,
-            subtipoAho: r.Subtipo_Aho,
-            producto: r.Nombre_Producto,
-            moneda: r.Moneda,
-            tipoCambio: Number(tc.toFixed(4)),
-            nroCuentas: 0,
-            saldoOriginal: 0,
-            saldoTotal: 0,
-            numTea: 0,
-            depositosOriginal: 0,
-            depositos: 0,
-            retirosOriginal: 0,
-            retiros: 0,
-          });
+        const mostrarProducto =
+          esPF ||
+          tipoCaptacion === "COMBINADO" ||
+          (tipoCaptacion === "APORTES" && esAporte) ||
+          (tipoCaptacion === "AHORROS" && !esAporte);
+
+        if (mostrarProducto) {
+          const prodKey = `${tipoAho}-${subtipoAho}`;
+          if (!productoMap.has(prodKey)) {
+            productoMap.set(prodKey, {
+              codigo: prodKey,
+              tipoAho,
+              subtipoAho,
+              categoria: esPF ? "PLAZO FIJO" : esAporte ? "APORTES (31110101)" : "AHORROS",
+              producto: r.Nombre_Producto,
+              moneda: r.Moneda,
+              tipoCambio: Number(tc.toFixed(4)),
+              nroCuentas: 0,
+              saldoOriginal: 0,
+              saldoTotal: 0,
+              numTea: 0,
+              depositosOriginal: 0,
+              depositos: 0,
+              retirosOriginal: 0,
+              retiros: 0,
+            });
+          }
+          const prod = productoMap.get(prodKey);
+          prod.nroCuentas += Number(r.Nro_Cuentas || 0);
+          prod.saldoOriginal += saldoOrig;
+          prod.saldoTotal += saldoEnSoles;
+          prod.numTea += numTeaEnSoles;
         }
-        const prod = productoMap.get(prodKey);
-        prod.nroCuentas += Number(r.Nro_Cuentas || 0);
-        prod.saldoOriginal += saldoOrig;
-        prod.saldoTotal += saldoEnSoles;
-        prod.numTea += numTeaEnSoles;
       });
 
       let kpiDepositosSoles = 0;
@@ -563,6 +757,22 @@ router.get(
       let kpiRetirosUSD = 0;
 
       flujoRows.forEach((r: any) => {
+        const tipoAho = String(r.Tipo_Aho || "").trim();
+        const subtipoAho = String(r.Subtipo_Aho || "").trim();
+
+        if (esSubtipoExcluido(tipoAho, subtipoAho)) return;
+
+        const esPF = tipoAho === "03";
+        const esAporte = esSubtipoAporte(tipoAho, subtipoAho);
+
+        const incluirFlujo =
+          esPF ||
+          tipoCaptacion === "COMBINADO" ||
+          (tipoCaptacion === "APORTES" && esAporte) ||
+          (tipoCaptacion === "AHORROS" && !esAporte);
+
+        if (!incluirFlujo) return;
+
         const esME = String(r.Moneda).trim() === "ME";
         const tc = esME ? Number(r.Tipo_Cambio || tipoCambioPeriodo) : 1.0;
         const depOrig = Number(r.Monto_Depositos || 0);
@@ -589,7 +799,7 @@ router.get(
         as.depositos += depSoles;
         as.retiros += retSoles;
 
-        const prodKey = `${r.Tipo_Aho}-${r.Subtipo_Aho}`;
+        const prodKey = `${tipoAho}-${subtipoAho}`;
         if (productoMap.has(prodKey)) {
           const prod = productoMap.get(prodKey);
           prod.depositosOriginal += depOrig;
@@ -666,6 +876,10 @@ router.get(
 
       const teaPasivaAhorros =
         kpiSaldoAhorrosSoles > 0 ? kpiNumTeaAhorros / kpiSaldoAhorrosSoles : 0;
+      const teaSoloAhorros =
+        kpiSoloAhorrosSoles > 0 ? kpiNumTeaSoloAhorros / kpiSoloAhorrosSoles : 0;
+      const teaSoloAportes =
+        kpiSoloAportesSoles > 0 ? kpiNumTeaSoloAportes / kpiSoloAportesSoles : 0;
       const teaPasivaPlazoFijo =
         kpiSaldoPFSoles > 0 ? kpiNumTeaPF / kpiSaldoPFSoles : 0;
       const saldoCaptacionesTotal = kpiSaldoAhorrosSoles + kpiSaldoPFSoles;
@@ -681,6 +895,10 @@ router.get(
         .map((a) => {
           const totalCap = a.saldoAhorros + a.saldoPlazoFijo;
           const teaAho = a.saldoAhorros > 0 ? a.numTeaAhorros / a.saldoAhorros : 0;
+          const teaSoloAho =
+            a.saldoSoloAhorros > 0 ? a.numTeaSoloAhorros / a.saldoSoloAhorros : 0;
+          const teaSoloApo =
+            a.saldoSoloAportes > 0 ? a.numTeaSoloAportes / a.saldoSoloAportes : 0;
           const teaPF =
             a.saldoPlazoFijo > 0 ? a.numTeaPlazoFijo / a.saldoPlazoFijo : 0;
           const teaPasiva =
@@ -693,6 +911,8 @@ router.get(
             ...a,
             totalCaptaciones: totalCap,
             teaAhorros: Number(teaAho.toFixed(2)),
+            teaSoloAhorros: Number(teaSoloAho.toFixed(2)),
+            teaSoloAportes: Number(teaSoloApo.toFixed(2)),
             teaPlazoFijo: Number(teaPF.toFixed(2)),
             teaPasivaTotal: Number(teaPasiva.toFixed(2)),
             teaActiva: Number(teaActiva.toFixed(2)),
@@ -706,6 +926,10 @@ router.get(
           const totalCap = as.saldoAhorros + as.saldoPlazoFijo;
           const teaAho =
             as.saldoAhorros > 0 ? as.numTeaAhorros / as.saldoAhorros : 0;
+          const teaSoloAho =
+            as.saldoSoloAhorros > 0 ? as.numTeaSoloAhorros / as.saldoSoloAhorros : 0;
+          const teaSoloApo =
+            as.saldoSoloAportes > 0 ? as.numTeaSoloAportes / as.saldoSoloAportes : 0;
           const teaPF =
             as.saldoPlazoFijo > 0 ? as.numTeaPlazoFijo / as.saldoPlazoFijo : 0;
           const teaPasiva =
@@ -720,6 +944,8 @@ router.get(
             ...as,
             totalCaptaciones: totalCap,
             teaAhorros: Number(teaAho.toFixed(2)),
+            teaSoloAhorros: Number(teaSoloAho.toFixed(2)),
+            teaSoloAportes: Number(teaSoloApo.toFixed(2)),
             teaPlazoFijo: Number(teaPF.toFixed(2)),
             teaPasivaTotal: Number(teaPasiva.toFixed(2)),
             teaActiva: Number(teaActiva.toFixed(2)),
@@ -811,6 +1037,14 @@ router.get(
           saldoAhorrosUSD: kpiSaldoAhorrosUSD,
           saldoAhorrosUSD_EnSoles: kpiSaldoAhorrosUSD_EnSoles,
           teaPasivaAhorros: Number(teaPasivaAhorros.toFixed(2)),
+          saldoSoloAhorros: kpiSoloAhorrosSoles,
+          saldoSoloAhorrosUSD: kpiSoloAhorrosUSD,
+          saldoSoloAhorrosUSD_EnSoles: kpiSoloAhorrosUSD_EnSoles,
+          teaSoloAhorros: Number(teaSoloAhorros.toFixed(2)),
+          saldoSoloAportes: kpiSoloAportesSoles,
+          saldoSoloAportesUSD: kpiSoloAportesUSD,
+          saldoSoloAportesUSD_EnSoles: kpiSoloAportesUSD_EnSoles,
+          teaSoloAportes: Number(teaSoloAportes.toFixed(2)),
           saldoPlazoFijo: kpiSaldoPFSoles,
           saldoPlazoFijoUSD: kpiSaldoPFUSD,
           saldoPlazoFijoUSD_EnSoles: kpiSaldoPFUSD_EnSoles,
@@ -838,8 +1072,10 @@ router.get(
         porAgencia,
         porAsesor,
         porProductoAhorro,
+        porTipoPrestamo,
         bancosManual: bancosRows,
         evolutivo: serieEvolutivaFinal,
+        
       });
     } catch (error) {
       console.error("Error en /api/balance-gerencial:", error);
@@ -884,6 +1120,9 @@ router.post(
           ([Periodo], [Fecha_Corte], [Entidad_Bancaria], [Moneda], [Saldo_Banco], [TEA_Pasiva_Banco], [Observacion], [Usuario_Registro], [Fecha_Actualizacion])
         VALUES
           (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
+
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
       `);
 
       res.json({ ok: true });
@@ -907,6 +1146,9 @@ router.delete(
       await request.query(`
         DELETE FROM [DWH_Gestion_Cartera].[dbo].[fct_gerencia_bancos_manual]
         WHERE [Id] = @id;
+
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
       `);
       res.json({ ok: true });
     } catch (error) {
