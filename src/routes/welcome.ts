@@ -3,27 +3,12 @@ import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
 import { getCombinedVersionSignature } from "../middlewares/smartCache";
+import { AGENCY_NAMES, sqlCaseAgencia } from "../lib/agencies";
 
 const router = Router();
 
-const AGENCY_MAP: Record<string, string> = {
-  "01": "Wanchaq",
-  "02": "San Jerónimo",
-  "03": "Quillabamba",
-  "04": "Sicuani",
-  "05": "Molino",
-  "06": "Juliaca",
-  "07": "Lima Los Olivos",
-  "08": "Tica Tica",
-  "09": "Magisterio",
-  "10": "Lima SJL",
-  "11": "Chiclayo",
-  "12": "Arequipa",
-  "13": "Pucallpa",
-};
-
 const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_MAP).map(([k, v]) => [v.toUpperCase(), k])
+  Object.entries(AGENCY_NAMES).map(([k, v]) => [v.toUpperCase(), k])
 );
 
 let tablesEnsured = false;
@@ -31,6 +16,9 @@ let tablesEnsured = false;
 async function ensureWelcomeTables() {
   if (tablesEnsured) return;
   await pool.request().query(`
+    IF COL_LENGTH('[DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral]', 'Dni') IS NULL
+      ALTER TABLE [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] ADD [Dni] VARCHAR(20) NULL;
+
     IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]', 'U') IS NULL
     BEGIN
       CREATE TABLE [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] (
@@ -115,9 +103,9 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
 
     const periodoReq = (req.query.periodo as string) || "";
     const agenciaCodeReq = (req.query.id_age as string) || "";
-    const asesorReq = (req.query.asesor as string) || "";
+    const asesorReq = ((req.query.asesor as string) || "").trim();
 
-    // 1. Obtener la lista completa de periodos históricos disponibles desde dim_calendario
+    // 1. Obtener lista de periodos disponibles
     const periodosRes = await pool.request().query(`
       SELECT DISTINCT RTRIM(LTRIM([Periodo])) AS Periodo 
       FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
@@ -126,11 +114,13 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
     `);
     const periodosDisponibles = periodosRes.recordset.map((p: any) => p.Periodo);
 
-    // Periodo activo: si el usuario seleccionó uno, usa ese; si no, el más reciente de la lista
-    const periodo = periodoReq || periodosDisponibles[0] || new Date().toISOString().slice(0,7).replace('-','');
+    const periodo =
+      periodoReq ||
+      periodosDisponibles[0] ||
+      new Date().toISOString().slice(0, 7).replace("-", "");
     const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
 
-    // 1.1. PERSISTENCIA AUTOMÁTICA DE ADMINISTRADORES AL CAMBIAR DE PERIODO
+    // 1.1. Persistencia automática de Administradores al cambiar de periodo
     await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
       IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
       BEGIN
@@ -149,413 +139,511 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
       END
     `);
 
-    // 1.2. KPIs RESUMIDOS COMERCIALES (PERIODO ACTUAL VS PERIODO ANTERIOR)
-    const kpiRequest = pool.request()
-      .input("periodo", sql.VarChar(6), periodo)
-      .input("idAgencia", sql.VarChar(2), idAgencia)
-      .input("asesor", sql.VarChar(150), asesorReq.trim());
-
-    const kpiResult = await kpiRequest.query(`
-      DECLARE @FechaBase DATE = TRY_CAST(@periodo + '01' AS DATE);
-      DECLARE @periodoAnt VARCHAR(6) = CASE 
-        WHEN @FechaBase IS NOT NULL THEN CONVERT(VARCHAR(6), DATEADD(MONTH, -1, @FechaBase), 112)
-        ELSE ''
-      END;
-
-      WITH AsesoresComerciales AS (
-        -- ✅ Solo Parte Comercial (Excluye RECUPERADOR para no sumar la cartera de recuperación)
-        SELECT
-          Periodo,
-          RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor,
-          MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia,
-          ISNULL(MAX(ColocacionNumMeta), 30) AS MetaOpAsesor
-        FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-        WHERE Periodo IN (@periodo, @periodoAnt)
-          AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-          AND (@idAgencia = '' OR RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) = @idAgencia)
-          AND (
-            @asesor = ''
-            OR RTRIM(LTRIM(IdSAsesor)) = @asesor
-            OR RTRIM(LTRIM(AsesorNombresApellidos)) LIKE '%' + @asesor + '%'
-            OR RTRIM(LTRIM(Asesor)) LIKE '%' + @asesor + '%'
-          )
-        GROUP BY Periodo, RTRIM(LTRIM(IdSAsesor))
-      ),
-      FlujoPorPeriodo AS (
-        SELECT
-          F.Periodo,
-          RTRIM(LTRIM(F.IdSAsesor)) AS IdSAsesor,
-          ISNULL(SUM(F.ColocacionNumReal), 0) AS opLogradas,
-          ISNULL(SUM(F.ColocacionMontoReal), 0) AS montoLogrado,
-          ISNULL(SUM(F.RepagoReal), 0) AS repagos,
-          ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionNumReal ELSE 0 END), 0) AS opHoy,
-          ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionMontoReal ELSE 0 END), 0) AS montoHoy
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
-        WHERE F.Periodo IN (@periodo, @periodoAnt)
-        GROUP BY F.Periodo, RTRIM(LTRIM(F.IdSAsesor))
-      ),
-      StockPorPeriodo AS (
-        SELECT
-          S.Periodo,
-          RTRIM(LTRIM(S.IdSAsesor)) AS IdSAsesor,
-          ISNULL(SUM(S.Cartera), 0) AS carteraStock,
-          ISNULL(SUM(S.Mora9), 0) AS moraCpp,
-          ISNULL(SUM(S.Mora31), 0) AS moraDeficiente,
-          ISNULL(SUM(S.Mora150), 0) AS mora150,
-          ISNULL(SUM(S.NroSociosAnterior), 0) AS sociosInicio,
-          ISNULL(SUM(S.NroSocios), 0) AS sociosActuales,
-          ISNULL(SUM(S.NroSociosActivos), 0) AS sociosActivos,
-          ISNULL(SUM(S.NroSociosCancelados), 0) AS sociosCancelados,
-          ISNULL(SUM(S.NroSociosTraspasados), 0) AS sociosTraspasados,
-          ISNULL(SUM(S.NroSociosRecuperacion), 0) AS sociosRecuperacion,
-          ISNULL(MAX(S.TEA), 0) AS maxTea
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_stock] S WITH (NOLOCK)
-        WHERE S.Periodo IN (@periodo, @periodoAnt)
-        GROUP BY S.Periodo, RTRIM(LTRIM(S.IdSAsesor))
-      ),
-      CarteraInicPorPeriodo AS (
-        SELECT
-          M.Periodo,
-          RTRIM(LTRIM(M.IdSAsesor)) AS IdSAsesor,
-          ISNULL(SUM(M.CarteraInicial), 0) AS carteraInicial
-        FROM [dm_productividad].[dbo].[fct_stock_manubl_asesor_month] M WITH (NOLOCK)
-        WHERE M.Periodo IN (@periodo, @periodoAnt)
-        GROUP BY M.Periodo, RTRIM(LTRIM(M.IdSAsesor))
-      ),
-      ResumenPorPeriodo AS (
-        SELECT
-          A.Periodo,
-          ISNULL(SUM(F.opLogradas), 0) AS opLogradas,
-          ISNULL(SUM(F.montoLogrado), 0) AS montoLogrado,
-          ISNULL(SUM(F.repagos), 0) AS repagos,
-          ISNULL(SUM(F.opHoy), 0) AS opHoy,
-          ISNULL(SUM(F.montoHoy), 0) AS montoHoy,
-          -- ✅ Cartera Comercial (Solo asesores comerciales, sin recuperadores)
-          ISNULL(SUM(COALESCE(NULLIF(CI.carteraInicial, 0), S.carteraStock, 0)), 0) AS carteraTotal,
-          ISNULL(SUM(S.moraCpp), 0) AS moraCpp,
-          ISNULL(SUM(S.moraDeficiente), 0) AS moraDeficiente,
-          ISNULL(SUM(S.mora150), 0) AS mora150,
-          ISNULL(SUM(S.sociosInicio), 0) AS sociosInicio,
-          ISNULL(SUM(S.sociosActuales), 0) AS sociosActuales,
-          ISNULL(SUM(S.sociosActivos), 0) AS sociosActivos,
-          ISNULL(SUM(S.sociosCancelados), 0) AS sociosCancelados,
-          ISNULL(SUM(S.sociosTraspasados), 0) AS sociosTraspasados,
-          ISNULL(SUM(S.sociosRecuperacion), 0) AS sociosRecuperacion,
-          ISNULL(SUM(A.MetaOpAsesor), 30) AS metaOpIndividual,
-          CASE 
-            WHEN SUM(F.montoLogrado) > 0 THEN SUM(F.montoLogrado * S.maxTea) / SUM(F.montoLogrado)
-            ELSE ISNULL(AVG(S.maxTea), 0)
-          END AS teaPromedio
-        FROM AsesoresComerciales A
-        LEFT JOIN FlujoPorPeriodo F ON A.Periodo = F.Periodo AND A.IdSAsesor = F.IdSAsesor
-        LEFT JOIN StockPorPeriodo S ON A.Periodo = S.Periodo AND A.IdSAsesor = S.IdSAsesor
-        LEFT JOIN CarteraInicPorPeriodo CI ON A.Periodo = CI.Periodo AND A.IdSAsesor = CI.IdSAsesor
-        GROUP BY A.Periodo
-      ),
-      Actual AS (
-        SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodo
-      ),
-      Anterior AS (
-        SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodoAnt
-      ),
-      MetasAgencia AS (
-        SELECT
-          ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS metaOpMensual,
-          ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS metaMontoMensual,
-          ISNULL(SUM(CASE WHEN CrecimientoMetaAjus > 0 THEN CrecimientoMetaAjus ELSE CrecimientoMeta END), 0) AS metaCrecimiento
-        FROM [dm_productividad].[dbo].[FctMensual] WITH (NOLOCK)
-        WHERE Periodo = @periodo
-          AND (@idAgencia = '' OR RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) = @idAgencia)
-      )
-      SELECT
-        @periodoAnt AS periodoAnterior,
-        ISNULL(ACT.opLogradas, 0) AS opLogradas,
-        ISNULL(ANT.opLogradas, 0) AS opLogradasAnt,
-        ISNULL(ACT.montoLogrado, 0) AS montoLogrado,
-        ISNULL(ANT.montoLogrado, 0) AS montoLogradoAnt,
-        ISNULL(ACT.repagos, 0) AS repagos,
-        ISNULL(ANT.repagos, 0) AS repagosAnt,
-        ISNULL(ACT.opHoy, 0) AS opHoy,
-        ISNULL(ACT.montoHoy, 0) AS montoHoy,
-        CASE WHEN @asesor <> '' THEN ISNULL(ACT.metaOpIndividual, 30) ELSE MA.metaOpMensual END AS metaOpMensual,
-        CASE WHEN @asesor <> '' THEN (ISNULL(ACT.metaOpIndividual, 30) * 2500) ELSE MA.metaMontoMensual END AS metaMontoMensual,
-        MA.metaCrecimiento,
-        ISNULL(ACT.carteraTotal, 0) AS carteraTotal,
-        ISNULL(ANT.carteraTotal, 0) AS carteraTotalAnt,
-        (ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) AS crecimientoBruto,
-        (ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) AS crecimientoBrutoAnt,
-        ((ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) - ISNULL(ACT.mora150, 0)) AS crecimientoNeto150,
-        ((ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) - ISNULL(ANT.mora150, 0)) AS crecimientoNeto150Ant,
-        ISNULL(ACT.moraCpp, 0) AS moraCpp,
-        ISNULL(ANT.moraCpp, 0) AS moraCppAnt,
-        ISNULL(ACT.moraDeficiente, 0) AS moraDeficiente,
-        ISNULL(ANT.moraDeficiente, 0) AS moraDeficienteAnt,
-        ISNULL(ACT.mora150, 0) AS mora150,
-        ISNULL(ANT.mora150, 0) AS mora150Ant,
-        ISNULL(ACT.sociosInicio, 0) AS sociosInicio,
-        ISNULL(ANT.sociosInicio, 0) AS sociosInicioAnt,
-        ISNULL(ACT.sociosActuales, 0) AS sociosActuales,
-        ISNULL(ANT.sociosActuales, 0) AS sociosActualesAnt,
-        (ISNULL(ACT.sociosActuales, 0) - ISNULL(ACT.sociosInicio, 0)) AS sociosNuevosNeto,
-        (ISNULL(ANT.sociosActuales, 0) - ISNULL(ANT.sociosInicio, 0)) AS sociosNuevosNetoAnt,
-        ISNULL(ACT.sociosActivos, 0) AS sociosActivos,
-        ISNULL(ANT.sociosActivos, 0) AS sociosActivosAnt,
-        ISNULL(ACT.sociosCancelados, 0) AS sociosCancelados,
-        ISNULL(ANT.sociosCancelados, 0) AS sociosCanceladosAnt,
-        ISNULL(ACT.sociosTraspasados, 0) AS sociosTraspasados,
-        ISNULL(ANT.sociosTraspasados, 0) AS sociosTraspasadosAnt,
-        ISNULL(ACT.sociosRecuperacion, 0) AS sociosRecuperacion,
-        ISNULL(ANT.sociosRecuperacion, 0) AS sociosRecuperacionAnt,
-        (ISNULL(ACT.sociosInicio, 0) - ISNULL(ACT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupe,
-        (ISNULL(ANT.sociosInicio, 0) - ISNULL(ANT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupeAnt,
-        ISNULL(ACT.teaPromedio, 0) AS teaPromedio,
-        ISNULL(ANT.teaPromedio, 0) AS teaPromedioAnt
-      FROM MetasAgencia MA
-      LEFT JOIN Actual ACT ON 1 = 1
-      LEFT JOIN Anterior ANT ON 1 = 1;
-    `);
-
-    // 1.3. PRODUCTIVIDAD EN VIVO POR AGENCIA
-    const prodVivoRes = await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
-      DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
-
-      WITH Agencias AS (
-        SELECT * FROM (VALUES
-          ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
-          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
-          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
-          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
-          ('13', 'Pucallpa')
-        ) AS t(IdSAgencia, NombreAgencia)
-      ),
-      MetasHoy AS (
-        SELECT
-          RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) AS IdSAgencia,
-          ISNULL(ColocacionNumMeta, 0) AS opFaltantesDia,
-          ISNULL(ColocacionMontoMeta, 0) AS crecFaltanteDia,
-          ISNULL(ColocacionNumProy, 0) AS proyOpDia,
-          ISNULL(ColocacionMontoProy, 0) AS proyMontoDia
-        FROM [dm_productividad].[dbo].[FctDiario_MetaProy] WITH (NOLOCK)
-        WHERE Fecha = @Hoy
-      ),
-      ControlHoy AS (
-        SELECT
-          IdSAgencia,
-          Op_Faltantes_Dia,
-          Crec_Faltante_Dia,
-          Sugerencia_Op_Gerencia,
-          Sugerencia_Monto_Gerencia,
-          Proy_Op_Admin,
-          Proy_Monto_Admin,
-          Actualizado_Por,
-          Rol_Editor,
-          CONVERT(VARCHAR(19), Fecha_Actualizacion, 120) AS Fecha_Actualizacion
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
-        WHERE Fecha = @Hoy
-      ),
-      SumaAsesoresHoy AS (
-        SELECT
-          IdSAgencia,
-          SUM(Meta_Op_Dia) AS sumaOpAsesores,
-          SUM(Meta_Monto_Dia) AS sumaMontoAsesores
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
-        WHERE Fecha = @Hoy
-        GROUP BY IdSAgencia
-      ),
-      LogradoHoy AS (
-        SELECT
-          RTRIM(LTRIM(IdSAgencia)) AS IdSAgencia,
-          ISNULL(SUM(ColocacionNumReal), 0) AS colocacionNumReal,
-          ISNULL(SUM(ColocacionMontoReal), 0) AS colocacionMontoReal
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
-        WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @Hoy
-        GROUP BY RTRIM(LTRIM(IdSAgencia))
-      )
-      SELECT
-        CONVERT(VARCHAR(10), @Hoy, 120) AS fecha,
-        @periodo AS periodo,
-        A.IdSAgencia AS idAgencia,
-        A.NombreAgencia AS agencia,
-        COALESCE(C.Op_Faltantes_Dia, M.opFaltantesDia, 12) AS opFaltantesDia,
-        COALESCE(C.Crec_Faltante_Dia, M.crecFaltanteDia, 20000) AS crecFaltanteDia,
-        COALESCE(C.Sugerencia_Op_Gerencia, M.proyOpDia, 10) AS sugerenciaOpGerencia,
-        COALESCE(C.Sugerencia_Monto_Gerencia, M.proyMontoDia, 20000) AS sugerenciaMontoGerencia,
-        COALESCE(C.Proy_Op_Admin, M.proyOpDia, C.Sugerencia_Op_Gerencia, 0) AS proyeccionColocacion,
-        COALESCE(C.Proy_Monto_Admin, M.proyMontoDia, C.Sugerencia_Monto_Gerencia, 0) AS proyeccionMonto,
-        ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
-        ISNULL(SA.sumaMontoAsesores, 0) AS sumaMontoAsesores,
-        ISNULL(L.colocacionNumReal, 0) AS colocacionNumReal,
-        ISNULL(L.colocacionMontoReal, 0) AS colocacionMontoReal,
-        ISNULL(C.Actualizado_Por, 'Sistema / Daemon') AS actualizadoPor,
-        ISNULL(C.Rol_Editor, '') AS rolEditor,
-        ISNULL(C.Fecha_Actualizacion, '') AS fechaActualizacion
-      FROM Agencias A
-      LEFT JOIN MetasHoy M ON A.IdSAgencia = M.IdSAgencia
-      LEFT JOIN ControlHoy C ON A.IdSAgencia = C.IdSAgencia
-      LEFT JOIN SumaAsesoresHoy SA ON A.IdSAgencia = SA.IdSAgencia
-      LEFT JOIN LogradoHoy L ON A.IdSAgencia = L.IdSAgencia
-      ORDER BY A.IdSAgencia ASC;
-    `);
-
-    // 1.4. METAS MENSUALES + HISTORIAL
-    const metasMensualesRes = await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
-      WITH Agencias AS (
-        SELECT * FROM (VALUES
-          ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
-          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
-          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
-          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
-          ('13', 'Pucallpa')
-        ) AS t(IdSAgencia, NombreAgencia)
-      )
-      SELECT
-        @periodo AS periodo,
-        A.IdSAgencia AS idAgencia,
-        A.NombreAgencia AS agencia,
-        ISNULL(M.ColocacionNumMeta, 0) AS colocacionNumMeta,
-        ISNULL(M.ColocacionNumMetaAjus, 0) AS colocacionNumMetaAjus,
-        ISNULL(M.ColocacionMontoMeta, 0) AS colocacionMontoMeta,
-        ISNULL(M.ColocacionMontoMetaAjus, 0) AS colocacionMontoMetaAjus,
-        ISNULL(M.NumeroAsesores, 0) AS numeroAsesores,
-        ISNULL(M.NumeroAsesoresAjus, 0) AS numeroAsesoresAjus,
-        ISNULL(M.CrecimientoMeta, ISNULL(M.CrecimientoMetaAjus, 0)) AS crecimientoMeta,
-        ISNULL(M.CrecimientoMetaAjus, 0) AS crecimientoMetaAjus
-      FROM Agencias A
-      LEFT JOIN [dm_productividad].[dbo].[FctMensual] M WITH (NOLOCK)
-        ON RIGHT('00' + CAST(M.IdSAgencia AS VARCHAR(2)), 2) = A.IdSAgencia
-        AND M.Periodo = @periodo
-      ORDER BY A.IdSAgencia ASC;
-    `);
-
-    const historialMetasRes = await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
-      SELECT TOP 25
-        [Id] AS id,
-        [Periodo] AS periodo,
-        [Usuario_Nombre] AS usuarioNombre,
-        [Usuario_Email] AS usuarioEmail,
-        [Usuario_Rol] AS usuarioRol,
-        [Resumen_Cambio] AS resumenCambio,
-        FORMAT([Fecha_Hora], 'dd/MM/yyyy HH:mm:ss') AS fechaHora
-      FROM [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales] WITH (NOLOCK)
-      ORDER BY [Fecha_Hora] DESC;
-    `);
-
-    // 1.5. TABLA DE ADMINISTRADORES
-    const adminsRes = await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
-      WITH Agencias AS (
-        SELECT * FROM (VALUES
-          ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
-          ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
-          ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
-          ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
-          ('13', 'Pucallpa')
-        ) AS t(IdSAgencia, NombreAgencia)
-      )
-      SELECT
-        @periodo AS periodo,
-        A.IdSAgencia AS idAgencia,
-        A.NombreAgencia AS agencia,
-        ISNULL(AD.Nombre, '') AS nombre,
-        ISNULL(AD.Celular, '') AS celular,
-        ISNULL(AD.CorreoPersonal, '') AS correoPersonal,
-        ISNULL(AD.CorreoCorporativo, '') AS correoCorporativo
-      FROM Agencias A
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_administrador] AD WITH (NOLOCK)
-        ON RIGHT('00' + RTRIM(LTRIM(AD.IdSAgencia)), 2) = A.IdSAgencia
-        AND AD.Periodo = @periodo
-      ORDER BY A.IdSAgencia ASC;
-    `);
-
-    // 1.6. MORA POTENCIAL
-    const moraRes = await pool.request()
-      .input("idAgencia", sql.VarChar(2), idAgencia)
-      .input("asesor", sql.VarChar(150), asesorReq.trim())
-      .query(`
-        DECLARE @UltimaFecha DATE = (
-          SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
-        );
-
-        SELECT
-          R.[IdSAgencia] AS idAgencia,
-          CASE R.[IdSAgencia]
-            WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba'
-            WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
-            WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
-            WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
-            WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia'
-          END AS agencia,
-          RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
-          ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
-          RTRIM(LTRIM(R.[Pagare])) AS pagare,
-          CASE
-            WHEN R.[Cuenta] IS NULL OR LTRIM(RTRIM(R.[Cuenta])) = '' THEN ''
-            ELSE RIGHT('000000000000' + LTRIM(RTRIM(R.[Cuenta])), 12)
-          END AS cuenta,
-          RTRIM(LTRIM(R.[Socio])) AS socio,
-          RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
-          ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
-          ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
-          ISNULL(R.[Cuotas_Atrasadas], 0) AS cuotasAtrasadas,
-          ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
-          ISNULL(R.[Cuotas_Pendientes], 0) AS cuotasPendientes,
-          ISNULL(R.[Cuotas_Pagadas], 0) AS cuotasPagadas,
-          ISNULL(R.[Avance_Cuota], '0%') AS avanceCuota,
-          ISNULL(R.[Telefonos], '') AS telefonos,
-          R.[Probabilidad_IA] AS probabilidadIa,
-          COALESCE(CW.[Compromiso_Actual], R.[Compromiso], '') AS compromiso,
-          CASE
-            WHEN CW.[Fecha_Promesa_Actual] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Actual], 120)
-            WHEN R.[Fecha_Promesa] IS NOT NULL THEN CONVERT(VARCHAR(10), R.[Fecha_Promesa], 120)
+    // 🚀 2. EJECUCIÓN EN PARALELO DE LAS 8 CONSULTAS DEL WELCOME
+    const [
+      kpiResult,
+      prodVivoRes,
+      metasMensualesRes,
+      historialMetasRes,
+      adminsRes,
+      moraAllRes,
+      metaAsesorHoyRes,
+      logRes,
+    ] = await Promise.all([
+      // 2.1. KPIs Resumidos Comerciales
+      pool
+        .request()
+        .input("periodo", sql.VarChar(6), periodo)
+        .input("idAgencia", sql.VarChar(2), idAgencia)
+        .input("asesor", sql.VarChar(150), asesorReq)
+        .query(`
+          DECLARE @FechaBase DATE = TRY_CAST(@periodo + '01' AS DATE);
+          DECLARE @periodoAnt VARCHAR(6) = CASE 
+            WHEN @FechaBase IS NOT NULL THEN CONVERT(VARCHAR(6), DATEADD(MONTH, -1, @FechaBase), 112)
             ELSE ''
-          END AS fechaPromesa,
-          ISNULL(CW.[Autor_Actual], CASE WHEN R.[Compromiso] IS NOT NULL AND R.[Compromiso] <> '' THEN 'Sincronizado GSheets' ELSE '' END) AS autorActual,
-          ISNULL(CW.[Rol_Actual], '') AS rolActual,
-          CASE WHEN CW.[Fecha_Actualizacion] IS NOT NULL THEN FORMAT(CW.[Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaActualizacionCompromiso,
-          ISNULL(CW.[Compromiso_Anterior], '') AS compromisoAnterior,
-          CASE WHEN CW.[Fecha_Promesa_Anterior] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Anterior], 103) ELSE '' END AS fechaPromesaAnterior,
-          ISNULL(CW.[Autor_Anterior], '') AS autorAnterior,
-          ISNULL(CW.[Rol_Anterior], '') AS rolAnterior,
-          CASE WHEN CW.[Fecha_Anterior] IS NOT NULL THEN FORMAT(CW.[Fecha_Anterior], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaAnteriorCompromiso
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
-        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] CW WITH (NOLOCK)
-          ON RTRIM(LTRIM(R.[Pagare])) = RTRIM(LTRIM(CW.[Pagare]))
-        OUTER APPLY (
-          SELECT TOP 1 ISNULL(DA.[AsesorNombresApellidos], DA.[Asesor]) AS NombreAsesor
-          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] DA WITH (NOLOCK)
-          WHERE RTRIM(LTRIM(DA.[IdSAsesor])) = RTRIM(LTRIM(R.[IdSAsesor]))
-          ORDER BY DA.[Periodo] DESC
-        ) D_AS
-        WHERE R.[Fecha_Foto] = @UltimaFecha
-          AND R.[Estado_Mora] = '3. Mora Potencial'
-          AND (@idAgencia = '' OR RTRIM(LTRIM(R.[IdSAgencia])) = @idAgencia)
-          AND (
-            @asesor = ''
-            OR RTRIM(LTRIM(R.[IdSAsesor])) = @asesor
-            OR RTRIM(LTRIM(D_AS.NombreAsesor)) LIKE '%' + @asesor + '%'
+          END;
+
+          WITH AsesoresComerciales AS (
+            SELECT
+              Periodo,
+              RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor,
+              MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia,
+              ISNULL(MAX(ColocacionNumMeta), 30) AS MetaOpAsesor
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+            WHERE Periodo IN (@periodo, @periodoAnt)
+              AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+              AND (@idAgencia = '' OR RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) = @idAgencia)
+              AND (
+                @asesor = ''
+                OR RTRIM(LTRIM(IdSAsesor)) = @asesor
+                OR RTRIM(LTRIM(AsesorNombresApellidos)) LIKE '%' + @asesor + '%'
+                OR RTRIM(LTRIM(Asesor)) LIKE '%' + @asesor + '%'
+              )
+            GROUP BY Periodo, RTRIM(LTRIM(IdSAsesor))
+          ),
+          FlujoPorPeriodo AS (
+            SELECT
+              F.Periodo,
+              RTRIM(LTRIM(F.IdSAsesor)) AS IdSAsesor,
+              ISNULL(SUM(F.ColocacionNumReal), 0) AS opLogradas,
+              ISNULL(SUM(F.ColocacionMontoReal), 0) AS montoLogrado,
+              ISNULL(SUM(F.RepagoReal), 0) AS repagos,
+              ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionNumReal ELSE 0 END), 0) AS opHoy,
+              ISNULL(SUM(CASE WHEN CAST(F.Fecha AS DATE) = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE) THEN F.ColocacionMontoReal ELSE 0 END), 0) AS montoHoy
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+            WHERE F.Periodo IN (@periodo, @periodoAnt)
+            GROUP BY F.Periodo, RTRIM(LTRIM(F.IdSAsesor))
+          ),
+          StockPorPeriodo AS (
+            SELECT
+              S.Periodo,
+              RTRIM(LTRIM(S.IdSAsesor)) AS IdSAsesor,
+              ISNULL(SUM(S.Cartera), 0) AS carteraStock,
+              ISNULL(SUM(S.Mora9), 0) AS moraCpp,
+              ISNULL(SUM(S.Mora31), 0) AS moraDeficiente,
+              ISNULL(SUM(S.Mora150), 0) AS mora150,
+              ISNULL(SUM(S.NroSociosAnterior), 0) AS sociosInicio,
+              ISNULL(SUM(S.NroSocios), 0) AS sociosActuales,
+              ISNULL(SUM(S.NroSociosActivos), 0) AS sociosActivos,
+              ISNULL(SUM(S.NroSociosCancelados), 0) AS sociosCancelados,
+              ISNULL(SUM(S.NroSociosTraspasados), 0) AS sociosTraspasados,
+              ISNULL(SUM(S.NroSociosRecuperacion), 0) AS sociosRecuperacion,
+              ISNULL(MAX(S.TEA), 0) AS maxTea
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_stock] S WITH (NOLOCK)
+            WHERE S.Periodo IN (@periodo, @periodoAnt)
+            GROUP BY S.Periodo, RTRIM(LTRIM(S.IdSAsesor))
+          ),
+          CarteraInicPorPeriodo AS (
+            SELECT
+              M.Periodo,
+              RTRIM(LTRIM(M.IdSAsesor)) AS IdSAsesor,
+              ISNULL(SUM(M.CarteraInicial), 0) AS carteraInicial
+            FROM [dm_productividad].[dbo].[fct_stock_manubl_asesor_month] M WITH (NOLOCK)
+            WHERE M.Periodo IN (@periodo, @periodoAnt)
+            GROUP BY M.Periodo, RTRIM(LTRIM(M.IdSAsesor))
+          ),
+          ResumenPorPeriodo AS (
+            SELECT
+              A.Periodo,
+              ISNULL(SUM(F.opLogradas), 0) AS opLogradas,
+              ISNULL(SUM(F.montoLogrado), 0) AS montoLogrado,
+              ISNULL(SUM(F.repagos), 0) AS repagos,
+              ISNULL(SUM(F.opHoy), 0) AS opHoy,
+              ISNULL(SUM(F.montoHoy), 0) AS montoHoy,
+              ISNULL(SUM(COALESCE(NULLIF(CI.carteraInicial, 0), S.carteraStock, 0)), 0) AS carteraTotal,
+              ISNULL(SUM(S.moraCpp), 0) AS moraCpp,
+              ISNULL(SUM(S.moraDeficiente), 0) AS moraDeficiente,
+              ISNULL(SUM(S.mora150), 0) AS mora150,
+              ISNULL(SUM(S.sociosInicio), 0) AS sociosInicio,
+              ISNULL(SUM(S.sociosActuales), 0) AS sociosActuales,
+              ISNULL(SUM(S.sociosActivos), 0) AS sociosActivos,
+              ISNULL(SUM(S.sociosCancelados), 0) AS sociosCancelados,
+              ISNULL(SUM(S.sociosTraspasados), 0) AS sociosTraspasados,
+              ISNULL(SUM(S.sociosRecuperacion), 0) AS sociosRecuperacion,
+              ISNULL(SUM(A.MetaOpAsesor), 30) AS metaOpIndividual,
+              CASE 
+                WHEN SUM(F.montoLogrado) > 0 THEN SUM(F.montoLogrado * S.maxTea) / SUM(F.montoLogrado)
+                ELSE ISNULL(AVG(S.maxTea), 0)
+              END AS teaPromedio
+            FROM AsesoresComerciales A
+            LEFT JOIN FlujoPorPeriodo F ON A.Periodo = F.Periodo AND A.IdSAsesor = F.IdSAsesor
+            LEFT JOIN StockPorPeriodo S ON A.Periodo = S.Periodo AND A.IdSAsesor = S.IdSAsesor
+            LEFT JOIN CarteraInicPorPeriodo CI ON A.Periodo = CI.Periodo AND A.IdSAsesor = CI.IdSAsesor
+            GROUP BY A.Periodo
+          ),
+          Actual AS (SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodo),
+          Anterior AS (SELECT * FROM ResumenPorPeriodo WHERE Periodo = @periodoAnt),
+          MetasAgencia AS (
+            SELECT
+              ISNULL(SUM(CASE WHEN ColocacionNumMetaAjus > 0 THEN ColocacionNumMetaAjus ELSE ColocacionNumMeta END), 0) AS metaOpMensual,
+              ISNULL(SUM(CASE WHEN ColocacionMontoMetaAjus > 0 THEN ColocacionMontoMetaAjus ELSE ColocacionMontoMeta END), 0) AS metaMontoMensual,
+              ISNULL(SUM(CASE WHEN CrecimientoMetaAjus > 0 THEN CrecimientoMetaAjus ELSE CrecimientoMeta END), 0) AS metaCrecimiento
+            FROM [dm_productividad].[dbo].[FctMensual] WITH (NOLOCK)
+            WHERE Periodo = @periodo
+              AND (@idAgencia = '' OR RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) = @idAgencia)
           )
-        ORDER BY R.[Saldo_Capital] DESC;
-      `);
+          SELECT
+            @periodoAnt AS periodoAnterior,
+            ISNULL(ACT.opLogradas, 0) AS opLogradas,
+            ISNULL(ANT.opLogradas, 0) AS opLogradasAnt,
+            ISNULL(ACT.montoLogrado, 0) AS montoLogrado,
+            ISNULL(ANT.montoLogrado, 0) AS montoLogradoAnt,
+            ISNULL(ACT.repagos, 0) AS repagos,
+            ISNULL(ANT.repagos, 0) AS repagosAnt,
+            ISNULL(ACT.opHoy, 0) AS opHoy,
+            ISNULL(ACT.montoHoy, 0) AS montoHoy,
+            CASE WHEN @asesor <> '' THEN ISNULL(ACT.metaOpIndividual, 30) ELSE MA.metaOpMensual END AS metaOpMensual,
+            CASE WHEN @asesor <> '' THEN (ISNULL(ACT.metaOpIndividual, 30) * 2500) ELSE MA.metaMontoMensual END AS metaMontoMensual,
+            MA.metaCrecimiento,
+            ISNULL(ACT.carteraTotal, 0) AS carteraTotal,
+            ISNULL(ANT.carteraTotal, 0) AS carteraTotalAnt,
+            (ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) AS crecimientoBruto,
+            (ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) AS crecimientoBrutoAnt,
+            ((ISNULL(ACT.montoLogrado, 0) - ISNULL(ACT.repagos, 0)) - ISNULL(ACT.mora150, 0)) AS crecimientoNeto150,
+            ((ISNULL(ANT.montoLogrado, 0) - ISNULL(ANT.repagos, 0)) - ISNULL(ANT.mora150, 0)) AS crecimientoNeto150Ant,
+            ISNULL(ACT.moraCpp, 0) AS moraCpp,
+            ISNULL(ANT.moraCpp, 0) AS moraCppAnt,
+            ISNULL(ACT.moraDeficiente, 0) AS moraDeficiente,
+            ISNULL(ANT.moraDeficiente, 0) AS moraDeficienteAnt,
+            ISNULL(ACT.mora150, 0) AS mora150,
+            ISNULL(ANT.mora150, 0) AS mora150Ant,
+            ISNULL(ACT.sociosInicio, 0) AS sociosInicio,
+            ISNULL(ANT.sociosInicio, 0) AS sociosInicioAnt,
+            ISNULL(ACT.sociosActuales, 0) AS sociosActuales,
+            ISNULL(ANT.sociosActuales, 0) AS sociosActualesAnt,
+            (ISNULL(ACT.sociosActuales, 0) - ISNULL(ACT.sociosInicio, 0)) AS sociosNuevosNeto,
+            (ISNULL(ANT.sociosActuales, 0) - ISNULL(ANT.sociosInicio, 0)) AS sociosNuevosNetoAnt,
+            ISNULL(ACT.sociosActivos, 0) AS sociosActivos,
+            ISNULL(ANT.sociosActivos, 0) AS sociosActivosAnt,
+            ISNULL(ACT.sociosCancelados, 0) AS sociosCancelados,
+            ISNULL(ANT.sociosCancelados, 0) AS sociosCanceladosAnt,
+            ISNULL(ACT.sociosTraspasados, 0) AS sociosTraspasados,
+            ISNULL(ANT.sociosTraspasados, 0) AS sociosTraspasadosAnt,
+            ISNULL(ACT.sociosRecuperacion, 0) AS sociosRecuperacion,
+            ISNULL(ANT.sociosRecuperacion, 0) AS sociosRecuperacionAnt,
+            (ISNULL(ACT.sociosInicio, 0) - ISNULL(ACT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupe,
+            (ISNULL(ANT.sociosInicio, 0) - ISNULL(ANT.sociosRecuperacion, 0)) AS sociosInicioMenosRecupeAnt,
+            ISNULL(ACT.teaPromedio, 0) AS teaPromedio,
+            ISNULL(ANT.teaPromedio, 0) AS teaPromedioAnt
+          FROM MetasAgencia MA
+          LEFT JOIN Actual ACT ON 1 = 1
+          LEFT JOIN Anterior ANT ON 1 = 1;
+        `),
 
-    // 1.7. META DIARIA PROPIA DEL ANALISTA
-    const metaAsesorHoyRes = await pool.request()
-      .input("asesor", sql.VarChar(150), asesorReq.trim())
-      .query(`
-        SELECT TOP 1
-          [Meta_Op_Dia] AS metaOpDia,
-          [Meta_Monto_Dia] AS metaMontoDia,
-          FORMAT([Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') AS fechaActualizacion
-        FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
-        WHERE [Fecha] = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
-          AND ([IdSAsesor] = @asesor OR [AsesorNombre] LIKE '%' + @asesor + '%')
-      `);
+      // 2.2. Productividad Diaria y Cálculo 8 AM
+      pool.request().input("periodo", sql.VarChar(6), periodo).query(`
+        DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
+        DECLARE @Hoy DATE = CAST(@FechaHoraPeru AS DATE);
+        DECLARE @HoraActual TIME = CAST(@FechaHoraPeru AS TIME);
 
-    // 1.8. Hora oficial de última actualización en el DWH
-    const logRes = await pool.request().query(`
-      SELECT TOP (1)
-        FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm:ss tt', 'es-PE') AS UltimaActualizacion
-      FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
-      ORDER BY [UltimaActualizacion] DESC
-    `);
+        DECLARE @FechaCorteCalculo DATE = CASE
+          WHEN @HoraActual >= '08:00:00' THEN @Hoy
+          ELSE DATEADD(day, -1, @Hoy)
+        END;
+
+        DECLARE @DiasRestantes INT = (
+          SELECT COUNT(Fecha)
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE Periodo = @periodo
+            AND Fecha >= @FechaCorteCalculo
+            AND EsDomingo = 0
+            AND EsFeriado = 0
+        );
+        IF ISNULL(@DiasRestantes, 0) < 1 SET @DiasRestantes = 1;
+
+        WITH Agencias AS (
+          SELECT * FROM (VALUES
+            ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
+            ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+            ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+            ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+            ('13', 'Pucallpa')
+          ) AS t(IdSAgencia, NombreAgencia)
+        ),
+        MetasMensualesAgencia AS (
+          SELECT
+            RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia,
+            ISNULL(SUM(CASE WHEN ISNULL(ColocacionNumMetaAjus, 0) > 0 THEN ColocacionNumMetaAjus ELSE ISNULL(ColocacionNumMeta, 0) END), 0) AS metaOpMes,
+            ISNULL(SUM(CASE WHEN ISNULL(CrecimientoMetaAjus, 0) > 0 THEN CrecimientoMetaAjus ELSE ISNULL(CrecimientoMeta, 0) END), 0) AS metaCrecMes,
+            ISNULL(SUM(CASE WHEN ISNULL(ColocacionMontoMetaAjus, 0) > 0 THEN ColocacionMontoMetaAjus ELSE ISNULL(ColocacionMontoMeta, 0) END), 0) AS metaMontoMes
+          FROM [dm_productividad].[dbo].[FctMensual] WITH (NOLOCK)
+          WHERE Periodo = @periodo
+          GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
+        ),
+        AsesoresCom AS (
+          SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          WHERE Periodo = @periodo AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+        ),
+        LogradoPeriodoInicioDia AS (
+          SELECT
+            RIGHT('00' + RTRIM(LTRIM(F.IdSAgencia)), 2) AS IdSAgencia,
+            ISNULL(SUM(F.ColocacionNumReal), 0) AS opLogradasMes,
+            ISNULL(SUM(F.ColocacionMontoReal), 0) AS montoLogradoMes,
+            ISNULL(SUM(F.ColocacionMontoReal - ISNULL(F.RepagoReal, 0)), 0) AS crecBrutoMes
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+          INNER JOIN AsesoresCom AC ON RTRIM(LTRIM(F.IdSAsesor)) = AC.IdSAsesor
+          WHERE F.Periodo = @periodo
+            AND CAST(F.Fecha AS DATE) < @FechaCorteCalculo
+          GROUP BY RIGHT('00' + RTRIM(LTRIM(F.IdSAgencia)), 2)
+        ),
+        Calculo8AM AS (
+          SELECT
+            A.IdSAgencia,
+            CAST(ROUND(CASE WHEN (ISNULL(MM.metaOpMes, 0) - ISNULL(LP.opLogradasMes, 0)) > 0 THEN CAST(ISNULL(MM.metaOpMes, 0) - ISNULL(LP.opLogradasMes, 0) AS FLOAT) / CAST(@DiasRestantes AS FLOAT) ELSE 0 END, 0) AS INT) AS opFaltantesCalc,
+            CAST(ROUND(CASE WHEN (ISNULL(NULLIF(MM.metaCrecMes, 0), ISNULL(MM.metaMontoMes, 0)) - ISNULL(LP.crecBrutoMes, 0)) > 0 THEN CAST(ISNULL(NULLIF(MM.metaCrecMes, 0), ISNULL(MM.metaMontoMes, 0)) - ISNULL(LP.crecBrutoMes, 0) AS FLOAT) / CAST(@DiasRestantes AS FLOAT) ELSE 0 END, 0) AS INT) AS crecFaltanteCalc
+          FROM Agencias A
+          LEFT JOIN MetasMensualesAgencia MM ON A.IdSAgencia = MM.IdSAgencia
+          LEFT JOIN LogradoPeriodoInicioDia LP ON A.IdSAgencia = LP.IdSAgencia
+        ),
+        MetasHoy AS (
+          SELECT
+            RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) AS IdSAgencia,
+            CAST(ROUND(ISNULL(ColocacionNumMeta, 0), 0) AS INT) AS opFaltantesDia,
+            CAST(ROUND(ISNULL(ColocacionMontoMeta, 0), 0) AS INT) AS crecFaltanteDia,
+            CAST(ROUND(ISNULL(ColocacionNumProy, 0), 0) AS INT) AS proyOpDia,
+            CAST(ROUND(ISNULL(ColocacionMontoProy, 0), 0) AS INT) AS proyMontoDia
+          FROM [dm_productividad].[dbo].[FctDiario_MetaProy] WITH (NOLOCK)
+          WHERE Fecha = @Hoy
+        ),
+        ControlHoy AS (
+          SELECT
+            IdSAgencia,
+            CAST(ROUND(Op_Faltantes_Dia, 0) AS INT) AS Op_Faltantes_Dia,
+            CAST(ROUND(Crec_Faltante_Dia, 0) AS INT) AS Crec_Faltante_Dia,
+            CAST(ROUND(Sugerencia_Op_Gerencia, 0) AS INT) AS Sugerencia_Op_Gerencia,
+            CAST(ROUND(Sugerencia_Monto_Gerencia, 0) AS INT) AS Sugerencia_Monto_Gerencia,
+            CAST(ROUND(Proy_Op_Admin, 0) AS INT) AS Proy_Op_Admin,
+            CAST(ROUND(Proy_Monto_Admin, 0) AS INT) AS Proy_Monto_Admin,
+            Actualizado_Por,
+            Rol_Editor,
+            CONVERT(VARCHAR(19), Fecha_Actualizacion, 120) AS Fecha_Actualizacion
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+          WHERE Fecha = @Hoy
+        ),
+        SumaAsesoresHoy AS (
+          SELECT
+            IdSAgencia,
+            CAST(ROUND(SUM(Meta_Op_Dia), 0) AS INT) AS sumaOpAsesores,
+            CAST(ROUND(SUM(Meta_Monto_Dia), 0) AS INT) AS sumaMontoAsesores
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
+          WHERE Fecha = @Hoy
+          GROUP BY IdSAgencia
+        ),
+        LogradoHoy AS (
+          SELECT
+            RTRIM(LTRIM(IdSAgencia)) AS IdSAgencia,
+            CAST(ROUND(ISNULL(SUM(ColocacionNumReal), 0), 0) AS INT) AS colocacionNumReal,
+            CAST(ROUND(ISNULL(SUM(ColocacionMontoReal), 0), 0) AS INT) AS colocacionMontoReal
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
+          WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @Hoy
+          GROUP BY RTRIM(LTRIM(IdSAgencia))
+        )
+        SELECT
+          CONVERT(VARCHAR(10), @Hoy, 120) AS fecha,
+          @periodo AS periodo,
+          A.IdSAgencia AS idAgencia,
+          A.NombreAgencia AS agencia,
+          COALESCE(NULLIF(C.Op_Faltantes_Dia, 0), C8.opFaltantesCalc, M.opFaltantesDia, 0) AS opFaltantesDia,
+          COALESCE(NULLIF(C.Crec_Faltante_Dia, 0), C8.crecFaltanteCalc, M.crecFaltanteDia, 0) AS crecFaltanteDia,
+          COALESCE(NULLIF(C.Sugerencia_Op_Gerencia, 0), (COALESCE(NULLIF(C.Op_Faltantes_Dia, 0), C8.opFaltantesCalc, M.opFaltantesDia, 0) + 1)) AS sugerenciaOpGerencia,
+          COALESCE(NULLIF(C.Sugerencia_Monto_Gerencia, 0), COALESCE(NULLIF(C.Crec_Faltante_Dia, 0), C8.crecFaltanteCalc, M.crecFaltanteDia, 0)) AS sugerenciaMontoGerencia,
+          COALESCE(C.Proy_Op_Admin, M.proyOpDia, C.Sugerencia_Op_Gerencia, (COALESCE(NULLIF(C.Op_Faltantes_Dia, 0), C8.opFaltantesCalc, M.opFaltantesDia, 0) + 1)) AS proyeccionColocacion,
+          COALESCE(C.Proy_Monto_Admin, M.proyMontoDia, C.Sugerencia_Monto_Gerencia, COALESCE(NULLIF(C.Crec_Faltante_Dia, 0), C8.crecFaltanteCalc, M.crecFaltanteDia, 0)) AS proyeccionMonto,
+          ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
+          ISNULL(SA.sumaMontoAsesores, 0) AS sumaMontoAsesores,
+          ISNULL(L.colocacionNumReal, 0) AS colocacionNumReal,
+          ISNULL(L.colocacionMontoReal, 0) AS colocacionMontoReal,
+          ISNULL(C.Actualizado_Por, 'Cálculo Automático 08:00 AM') AS actualizadoPor,
+          ISNULL(C.Rol_Editor, '') AS rolEditor,
+          ISNULL(C.Fecha_Actualizacion, '') AS fechaActualizacion
+        FROM Agencias A
+        LEFT JOIN Calculo8AM C8 ON A.IdSAgencia = C8.IdSAgencia
+        LEFT JOIN MetasHoy M ON A.IdSAgencia = M.IdSAgencia
+        LEFT JOIN ControlHoy C ON A.IdSAgencia = C.IdSAgencia
+        LEFT JOIN SumaAsesoresHoy SA ON A.IdSAgencia = SA.IdSAgencia
+        LEFT JOIN LogradoHoy L ON A.IdSAgencia = L.IdSAgencia
+        ORDER BY A.IdSAgencia ASC;
+      `),
+
+      // 2.3. Metas Mensuales
+      pool.request().input("periodo", sql.VarChar(6), periodo).query(`
+        WITH Agencias AS (
+          SELECT * FROM (VALUES
+            ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
+            ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+            ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+            ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+            ('13', 'Pucallpa')
+          ) AS t(IdSAgencia, NombreAgencia)
+        )
+        SELECT
+          @periodo AS periodo,
+          A.IdSAgencia AS idAgencia,
+          A.NombreAgencia AS agencia,
+          ISNULL(M.ColocacionNumMeta, 0) AS colocacionNumMeta,
+          ISNULL(M.ColocacionNumMetaAjus, 0) AS colocacionNumMetaAjus,
+          ISNULL(M.ColocacionMontoMeta, 0) AS colocacionMontoMeta,
+          ISNULL(M.ColocacionMontoMetaAjus, 0) AS colocacionMontoMetaAjus,
+          ISNULL(M.NumeroAsesores, 0) AS numeroAsesores,
+          ISNULL(M.NumeroAsesoresAjus, 0) AS numeroAsesoresAjus,
+          ISNULL(M.CrecimientoMeta, ISNULL(M.CrecimientoMetaAjus, 0)) AS crecimientoMeta,
+          ISNULL(M.CrecimientoMetaAjus, 0) AS crecimientoMetaAjus
+        FROM Agencias A
+        LEFT JOIN [dm_productividad].[dbo].[FctMensual] M WITH (NOLOCK)
+          ON RIGHT('00' + CAST(M.IdSAgencia AS VARCHAR(2)), 2) = A.IdSAgencia
+          AND M.Periodo = @periodo
+        ORDER BY A.IdSAgencia ASC;
+      `),
+
+      // 2.4. Historial de Auditoría de Metas Mensuales
+      pool.request().query(`
+        SELECT TOP 25
+          [Id] AS id,
+          [Periodo] AS periodo,
+          [Usuario_Nombre] AS usuarioNombre,
+          [Usuario_Email] AS usuarioEmail,
+          [Usuario_Rol] AS usuarioRol,
+          [Resumen_Cambio] AS resumenCambio,
+          FORMAT([Fecha_Hora], 'dd/MM/yyyy HH:mm:ss') AS fechaHora
+        FROM [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales] WITH (NOLOCK)
+        ORDER BY [Fecha_Hora] DESC;
+      `),
+
+      // 2.5. Tabla de Administradores
+      pool.request().input("periodo", sql.VarChar(6), periodo).query(`
+        WITH Agencias AS (
+          SELECT * FROM (VALUES
+            ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
+            ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+            ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+            ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+            ('13', 'Pucallpa')
+          ) AS t(IdSAgencia, NombreAgencia)
+        )
+        SELECT
+          @periodo AS periodo,
+          A.IdSAgencia AS idAgencia,
+          A.NombreAgencia AS agencia,
+          ISNULL(AD.Nombre, '') AS nombre,
+          ISNULL(AD.Celular, '') AS celular,
+          ISNULL(AD.CorreoPersonal, '') AS correoPersonal,
+          ISNULL(AD.CorreoCorporativo, '') AS correoCorporativo
+        FROM Agencias A
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[dim_administrador] AD WITH (NOLOCK)
+          ON RIGHT('00' + RTRIM(LTRIM(AD.IdSAgencia)), 2) = A.IdSAgencia
+          AND AD.Periodo = @periodo
+        ORDER BY A.IdSAgencia ASC;
+      `),
+
+      // 2.6. Mora desde el 1er Día + Alertas IA (con CTE UltimoAsesor en lugar de 3,148 OUTER APPLY)
+      pool
+        .request()
+        .input("idAgencia", sql.VarChar(2), idAgencia)
+        .input("asesor", sql.VarChar(150), asesorReq)
+        .query(`
+          DECLARE @UltimaFecha DATE = (
+            SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+          );
+          DECLARE @HoyPeru DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+
+          WITH UltimoAsesor AS (
+            SELECT
+              RTRIM(LTRIM([IdSAsesor])) AS IdSAsesor,
+              ISNULL([AsesorNombresApellidos], [Asesor]) AS NombreAsesor,
+              ROW_NUMBER() OVER (
+                PARTITION BY RTRIM(LTRIM([IdSAsesor]))
+                ORDER BY [Periodo] DESC
+              ) AS rn
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          )
+          SELECT
+            R.[IdSAgencia] AS idAgencia,
+            ${sqlCaseAgencia("R.[IdSAgencia]")} AS agencia,
+            RTRIM(LTRIM(R.[IdSAsesor])) AS idAsesor,
+            ISNULL(D_AS.NombreAsesor, RTRIM(LTRIM(R.[IdSAsesor]))) AS asesor,
+            RTRIM(LTRIM(R.[Pagare])) AS pagare,
+            CASE
+              WHEN R.[Cuenta] IS NULL OR LTRIM(RTRIM(R.[Cuenta])) = '' THEN ''
+              ELSE RIGHT('000000000000' + LTRIM(RTRIM(R.[Cuenta])), 12)
+            END AS cuenta,
+            LTRIM(RTRIM(ISNULL(R.[Dni], ''))) AS dni,
+            RTRIM(LTRIM(R.[Socio])) AS socio,
+            RTRIM(LTRIM(ISNULL(R.[Producto], ''))) AS producto,
+            R.[Estado_Mora] AS estadoMora,
+            ISNULL(R.[Saldo_Capital], 0) AS saldoCapital,
+            ISNULL(R.[Cuota_Mensual], 0) AS cuotaMensual,
+            ISNULL(R.[Cuotas_Atrasadas], 0) AS cuotasAtrasadas,
+            ISNULL(R.[Dias_Atraso], 0) AS diasAtraso,
+            ISNULL(R.[Cuotas_Pendientes], 0) AS cuotasPendientes,
+            ISNULL(R.[Cuotas_Pagadas], 0) AS cuotasPagadas,
+            ISNULL(R.[Avance_Cuota], '0%') AS avanceCuota,
+            CASE
+              WHEN R.[Fecha_Vcmto_Cuota] IS NOT NULL THEN CONVERT(VARCHAR(10), R.[Fecha_Vcmto_Cuota], 103)
+              ELSE ''
+            END AS fechaVencimientoCuota,
+            CASE
+              WHEN R.[Fecha_Vcmto_Cuota] IS NOT NULL THEN DATEDIFF(DAY, @HoyPeru, R.[Fecha_Vcmto_Cuota])
+              ELSE R.[Dias_Vcmto_Cuota]
+            END AS venceEnDias,
+            ISNULL(R.[Telefonos], '') AS telefonos,
+            R.[Probabilidad_IA] AS probabilidadIa,
+            CASE
+              WHEN R.[Probabilidad_IA] >= 65 THEN 'ALTO'
+              WHEN R.[Probabilidad_IA] >= 30 THEN 'MEDIO'
+              WHEN R.[Probabilidad_IA] IS NOT NULL THEN 'BAJO'
+              ELSE R.[Nivel_Riesgo_IA]
+            END AS nivelRiesgoIa,
+            CASE
+              WHEN R.[Probabilidad_IA] >= 30 THEN 1
+              ELSE 0
+            END AS advertidoPorIa,
+            COALESCE(CW.[Compromiso_Actual], R.[Compromiso], '') AS compromiso,
+            CASE
+              WHEN CW.[Fecha_Promesa_Actual] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Actual], 120)
+              WHEN R.[Fecha_Promesa] IS NOT NULL THEN CONVERT(VARCHAR(10), R.[Fecha_Promesa], 120)
+              ELSE ''
+            END AS fechaPromesa,
+            ISNULL(CW.[Autor_Actual], CASE WHEN R.[Compromiso] IS NOT NULL AND R.[Compromiso] <> '' THEN 'Sincronizado GSheets' ELSE '' END) AS autorActual,
+            ISNULL(CW.[Rol_Actual], '') AS rolActual,
+            CASE WHEN CW.[Fecha_Actualizacion] IS NOT NULL THEN FORMAT(CW.[Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaActualizacionCompromiso,
+            ISNULL(CW.[Compromiso_Anterior], '') AS compromisoAnterior,
+            CASE WHEN CW.[Fecha_Promesa_Anterior] IS NOT NULL THEN CONVERT(VARCHAR(10), CW.[Fecha_Promesa_Anterior], 103) ELSE '' END AS fechaPromesaAnterior,
+            ISNULL(CW.[Autor_Anterior], '') AS autorAnterior,
+            ISNULL(CW.[Rol_Anterior], '') AS rolAnterior,
+            CASE WHEN CW.[Fecha_Anterior] IS NOT NULL THEN FORMAT(CW.[Fecha_Anterior], 'dd/MM/yyyy HH:mm') ELSE '' END AS fechaAnteriorCompromiso
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
+          LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] CW WITH (NOLOCK)
+            ON RTRIM(LTRIM(R.[Pagare])) = RTRIM(LTRIM(CW.[Pagare]))
+          LEFT JOIN UltimoAsesor D_AS
+            ON D_AS.IdSAsesor = RTRIM(LTRIM(R.[IdSAsesor])) AND D_AS.rn = 1
+          WHERE R.[Fecha_Foto] = @UltimaFecha
+            AND (
+              R.[Estado_Mora] IN ('3. Mora Potencial', '2. Mora Temprana')
+              OR ISNULL(R.[Dias_Atraso], 0) >= 1
+              OR R.[Probabilidad_IA] >= 30
+            )
+            AND (@idAgencia = '' OR RTRIM(LTRIM(R.[IdSAgencia])) = @idAgencia)
+            AND (
+              @asesor = ''
+              OR RTRIM(LTRIM(R.[IdSAsesor])) = @asesor
+              OR RTRIM(LTRIM(D_AS.NombreAsesor)) LIKE '%' + @asesor + '%'
+            )
+          ORDER BY
+            CASE WHEN ISNULL(R.[Dias_Atraso], 0) >= 1 THEN 0 ELSE 1 END ASC,
+            R.[Dias_Atraso] DESC,
+            R.[Probabilidad_IA] DESC,
+            R.[Saldo_Capital] DESC;
+        `),
+
+      // 2.7. Meta Diaria Propia del Analista
+      pool
+        .request()
+        .input("asesor", sql.VarChar(150), asesorReq)
+        .query(`
+          SELECT TOP 1
+            [Meta_Op_Dia] AS metaOpDia,
+            [Meta_Monto_Dia] AS metaMontoDia,
+            FORMAT([Fecha_Actualizacion], 'dd/MM/yyyy HH:mm') AS fechaActualizacion
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WITH (NOLOCK)
+          WHERE [Fecha] = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE)
+            AND ([IdSAsesor] = @asesor OR [AsesorNombre] LIKE '%' + @asesor + '%')
+        `),
+
+      // 2.8. Hora oficial de última actualización
+      pool.request().query(`
+        SELECT TOP (1)
+          FORMAT([UltimaActualizacion], 'dd/MM/yyyy · hh:mm:ss tt', 'es-PE') AS UltimaActualizacion
+        FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
+        ORDER BY [UltimaActualizacion] DESC
+      `),
+    ]);
+
+    const allMoraRows = moraAllRes.recordset || [];
+    const moraPotencialRows = allMoraRows.filter((r: any) => r.estadoMora === "3. Mora Potencial");
+    const moraPrimerDiaRows = allMoraRows.filter(
+      (r: any) => Number(r.diasAtraso || 0) >= 1 || Number(r.probabilidadIa || 0) >= 30
+    );
     const ultimaActualizacionDwh = logRes.recordset?.[0]?.UltimaActualizacion || "";
 
     res.json({
@@ -568,8 +656,13 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
       metasMensuales: metasMensualesRes.recordset || [],
       historialMetasMensuales: historialMetasRes.recordset || [],
       administradores: adminsRes.recordset || [],
-      moraPotencial: moraRes.recordset || [],
-      metaAsesorHoy: metaAsesorHoyRes.recordset?.[0] || { metaOpDia: 0, metaMontoDia: 0, fechaActualizacion: "" },
+      moraPotencial: moraPotencialRows,
+      moraPrimerDia: moraPrimerDiaRows,
+      metaAsesorHoy: metaAsesorHoyRes.recordset?.[0] || {
+        metaOpDia: 0,
+        metaMontoDia: 0,
+        fechaActualizacion: "",
+      },
     });
   } catch (error) {
     console.error("Error en /api/welcome/init:", error);
@@ -648,10 +741,14 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
               ISNULL([Proy_Monto_Admin], ISNULL([Sugerencia_Monto_Gerencia], 0))
             FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control]
             WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge;
-            IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
-            UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
           `);
       }
+
+      // ✅ Sellar Log_Actualizacion una sola vez fuera del bucle for
+      await new sql.Request(transaction).query(`
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+      `);
 
       await transaction.commit();
       res.json({ ok: true, message: "Metas diarias guardadas correctamente" });
@@ -689,11 +786,11 @@ router.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req: Re
         ELSE
         BEGIN
           INSERT INTO [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor]
-            ([Fecha], [IdSAsesor], [IdSAgencia], [AsesorNombre], [Meta_Op_Dia], [Meta_Monto_Dia], [Fecha_Actualizacion])
-          VALUES (@Hoy, @idAsesor, @idAge, @nombre, @op, @monto, GETDATE());
+            ([Fecha], [IdSAgencia], [IdSAsesor], [AsesorNombre], [Meta_Op_Dia], [Meta_Monto_Dia], [Fecha_Actualizacion])
+          VALUES (@Hoy, @idAge, @idAsesor, @nombre, @op, @monto, GETDATE());
         END
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
-        UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
       `);
 
     res.json({ ok: true, message: "Meta registrada con éxito." });
@@ -711,6 +808,11 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
       return res.status(400).json({ error: "Periodo y filas son obligatorios" });
     }
 
+    await pool.request().query(`
+      IF COL_LENGTH('[dm_productividad].[dbo].[FctMensual]', 'CrecimientoMeta') IS NULL
+        ALTER TABLE [dm_productividad].[dbo].[FctMensual] ADD [CrecimientoMeta] FLOAT NULL;
+    `);
+
     const transaction = new sql.Transaction(pool);
     await transaction.begin();
 
@@ -719,34 +821,46 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
         .input("periodo", sql.VarChar(6), String(periodo).trim())
         .query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
 
+      let totalOpBase = 0;
       let totalOpAjus = 0;
       let totalMontoAjus = 0;
 
       for (const row of filas) {
-        const opAjus = Number(row.colocacionNumMetaAjus || 0);
-        const montoAjus = Number(row.colocacionMontoMetaAjus || 0);
+        const opMeta = Number(row.colocacionNumMeta || 0);
+        const opAjus = Number(row.colocacionNumMetaAjus ?? opMeta);
+        const montoMeta = Number(row.colocacionMontoMeta || 0);
+        const montoAjus = Number(row.colocacionMontoMetaAjus ?? montoMeta);
+        const asesMeta = Number(row.numeroAsesores || 0);
+        const asesAjus = Number(row.numeroAsesoresAjus ?? asesMeta);
+        const crecMeta = Number(row.crecimientoMeta ?? row.crecimientoMetaAjus ?? 0);
+        const crecAjus = Number(row.crecimientoMetaAjus ?? crecMeta);
+
+        totalOpBase += opMeta;
         totalOpAjus += opAjus;
         totalMontoAjus += montoAjus;
 
         await new sql.Request(transaction)
           .input("periodo", sql.VarChar(6), String(periodo).trim())
           .input("idAge", sql.Int, parseInt(String(row.idAgencia || "1"), 10))
-          .input("opMeta", sql.Int, Number(row.colocacionNumMeta || 0))
+          .input("opMeta", sql.Int, opMeta)
           .input("opAjus", sql.Int, opAjus)
-          .input("montoMeta", sql.Float, Number(row.colocacionMontoMeta || 0))
+          .input("montoMeta", sql.Float, montoMeta)
           .input("montoAjus", sql.Float, montoAjus)
-          .input("asesores", sql.Int, Number(row.numeroAsesores || 0))
-          .input("asesoresAjus", sql.Int, Number(row.numeroAsesoresAjus || 0))
-          .input("crecAjus", sql.Int, Number(row.crecimientoMetaAjus || row.crecimientoMeta || 0))
+          .input("asesores", sql.Int, asesMeta)
+          .input("asesoresAjus", sql.Int, asesAjus)
+          .input("crecMeta", sql.Float, crecMeta)
+          .input("crecAjus", sql.Float, crecAjus)
           .query(`
             INSERT INTO [dm_productividad].[dbo].[FctMensual]
-              ([Periodo], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumMetaAjus], [ColocacionMontoMeta], [ColocacionMontoMetaAjus], [NumeroAsesores], [NumeroAsesoresAjus], [CrecimientoMetaAjus])
+              ([Periodo], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumMetaAjus], [ColocacionMontoMeta], [ColocacionMontoMetaAjus], [NumeroAsesores], [NumeroAsesoresAjus], [CrecimientoMeta], [CrecimientoMetaAjus])
             VALUES
-              (@periodo, @idAge, @opMeta, @opAjus, @montoMeta, @montoAjus, @asesores, @asesoresAjus, @crecAjus)
+              (@periodo, @idAge, @opMeta, @opAjus, @montoMeta, @montoAjus, @asesores, @asesoresAjus, @crecMeta, @crecAjus)
           `);
       }
 
-      const resumen = `Actualizó metas del periodo ${periodo} (${filas.length} agencias · Total Meta Op Ajustada: ${totalOpAjus} · Total Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
+      const diffOp = totalOpAjus - totalOpBase;
+      const diffSign = diffOp >= 0 ? `+${diffOp}` : `${diffOp}`;
+      const resumen = `Actualizó metas del periodo ${periodo} (${filas.length} agencias · Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] · Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
 
       await new sql.Request(transaction)
         .input("periodo", sql.VarChar(6), String(periodo).trim())
@@ -803,11 +917,15 @@ router.post(["/welcome/administradores", "/api/welcome/administradores"], async 
           .query(`
             INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
               ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
-            VALUES (@periodo, @idAge, @nombre, @celular, @correoPers, @correoCorp)
-            IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
-            UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+            VALUES (@periodo, @idAge, @nombre, @celular, @correoPers, @correoCorp);
           `);
       }
+
+      // ✅ Sellar Log_Actualizacion una sola vez fuera del bucle for
+      await new sql.Request(transaction).query(`
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 1)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 1;
+      `);
 
       await transaction.commit();
       res.json({ ok: true, message: "Directorio de Administradores actualizado." });
@@ -893,13 +1011,156 @@ router.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], async 
           AND [Fecha_Foto] = (SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral]);
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 4)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 4;
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (1, 4);
       `);
 
     res.json({ ok: true, message: "Compromiso guardado con éxito." });
   } catch (error) {
     console.error("Error guardando compromiso de mora:", error);
     res.status(500).json({ error: "Error al guardar el compromiso de pago" });
+  }
+});
+
+// ============================================================================
+// CONFIGURACIÓN MAESTRA DEL DAEMON, POLLING Y PERMISOS POR ROL
+// ============================================================================
+const DEFAULT_SYSTEM_CONFIG = {
+  daemon: {
+    horaInicioOperacion: 6,
+    horaFinOperacion: 22,
+    intervaloCicloBaseSeg: 120,
+    horaFinMantenimientoMetas: 8,
+    horaCorteCalculoFaltantes: "08:00",
+    horaEjecucionIaRanking: "08:30",
+    intervaloMoraRiesgoMin: 120,
+    intervaloPlazoFijoHoras: 12,
+    forzarMoraAhora: false,
+    forzarIaRankingAhora: false,
+    forzarPlazoFijoAhora: false,
+  },
+  polling: {
+    smartCacheWatcherSeg: 10,
+    biFiltrosPollingSeg: 120,
+    welcomeVivoPollingSeg: 5,
+    welcomeGeneralPollingSeg: 20,
+  },
+  permisos: {
+    GLOBAL: {
+      scope: "GLOBAL",
+      welcomeTabs: ["vivo", "metas_diarias", "metas_mensuales", "administradores", "mora", "cancelados", "avance", "config_sistema"],
+      biViews: ["gerencia", "balance", "reporte", "plazoFijo", "moraProducto", "supervision", "agencia", "traspasosRecuperacion", "asesores", "colocaciones", "diaria", "mora", "evolucion", "cancelados", "avance", "ranking"],
+    },
+    AGENCIA: {
+      scope: "AGENCIA",
+      welcomeTabs: ["vivo", "mora", "cancelados", "avance"],
+      biViews: ["balance", "agencia", "traspasosRecuperacion", "moraProducto", "asesores", "colocaciones", "diaria", "mora", "evolucion", "cancelados", "avance", "ranking"],
+    },
+    ASESOR: {
+      scope: "USUARIO",
+      welcomeTabs: ["mora", "cancelados", "avance"],
+      biViews: ["asesores", "colocaciones", "diaria", "mora", "cancelados", "avance", "ranking"],
+    },
+    RECUPERADOR: {
+      scope: "USUARIO",
+      welcomeTabs: ["mora", "cancelados", "avance"],
+      biViews: ["agencia", "traspasosRecuperacion", "moraProducto", "mora", "cancelados", "avance"],
+    },
+  },
+};
+
+let configTableEnsured = false;
+async function ensureConfigSistemaTable() {
+  if (configTableEnsured) return;
+  await pool.request().query(`
+    IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]', 'U') IS NULL
+    BEGIN
+      CREATE TABLE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] (
+        [Id] INT PRIMARY KEY CHECK ([Id] = 1),
+        [Config_Json] NVARCHAR(MAX) NOT NULL,
+        [Actualizado_Por] VARCHAR(150) NULL,
+        [Usuario_Rol] VARCHAR(60) NULL,
+        [Fecha_Actualizacion] DATETIME NOT NULL DEFAULT GETDATE()
+      );
+    END
+  `);
+  configTableEnsured = true;
+}
+
+router.get(["/welcome/config-sistema", "/api/welcome/config-sistema"], async (_req: Request, res: Response) => {
+  try {
+    await ensureConfigSistemaTable();
+    const result = await pool.request().query(`
+      SELECT TOP 1
+        [Config_Json],
+        ISNULL([Actualizado_Por], 'Valores por Defecto') AS Actualizado_Por,
+        ISNULL([Usuario_Rol], 'SISTEMA') AS Usuario_Rol,
+        FORMAT([Fecha_Actualizacion], 'dd/MM/yyyy HH:mm:ss') AS Fecha_Actualizacion
+      FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WITH (NOLOCK)
+      WHERE [Id] = 1;
+    `);
+
+    if (!result.recordset.length) {
+      return res.json({
+        config: DEFAULT_SYSTEM_CONFIG,
+        actualizadoPor: "Sistema (Por defecto)",
+        fechaActualizacion: "",
+      });
+    }
+
+    const row = result.recordset[0];
+    let parsed = DEFAULT_SYSTEM_CONFIG;
+    try {
+      const dbJson = JSON.parse(row.Config_Json);
+      parsed = {
+        daemon: { ...DEFAULT_SYSTEM_CONFIG.daemon, ...(dbJson.daemon || {}) },
+        polling: { ...DEFAULT_SYSTEM_CONFIG.polling, ...(dbJson.polling || {}) },
+        permisos: { ...DEFAULT_SYSTEM_CONFIG.permisos, ...(dbJson.permisos || {}) },
+      };
+    } catch {}
+
+    res.json({
+      config: parsed,
+      actualizadoPor: row.Actualizado_Por,
+      usuarioRol: row.Usuario_Rol,
+      fechaActualizacion: row.Fecha_Actualizacion,
+    });
+  } catch (error) {
+    console.error("Error obteniendo config-sistema:", error);
+    res.status(500).json({ error: "Error leyendo configuración del sistema" });
+  }
+});
+
+router.post(["/welcome/config-sistema", "/api/welcome/config-sistema"], async (req: Request, res: Response) => {
+  try {
+    await ensureConfigSistemaTable();
+    const { config, usuarioNombre, usuarioRol } = req.body;
+    if (!config) {
+      return res.status(400).json({ error: "El objeto config es requerido" });
+    }
+
+    const jsonStr = JSON.stringify(config);
+    await pool.request()
+      .input("json", sql.NVarChar(sql.MAX), jsonStr)
+      .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
+      .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+      .query(`
+        IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
+          UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
+          SET [Config_Json] = @json,
+              [Actualizado_Por] = @autor,
+              [Usuario_Rol] = @rol,
+              [Fecha_Actualizacion] = GETDATE()
+          WHERE [Id] = 1;
+        ELSE
+          INSERT INTO [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
+            ([Id], [Config_Json], [Actualizado_Por], [Usuario_Rol], [Fecha_Actualizacion])
+          VALUES (1, @json, @autor, @rol, GETDATE());
+      `);
+
+    res.json({ ok: true, message: "Configuración de horarios y accesos guardada en SQL Server." });
+  } catch (error) {
+    console.error("Error guardando config-sistema:", error);
+    res.status(500).json({ error: "No se pudo guardar la configuración del sistema" });
   }
 });
 

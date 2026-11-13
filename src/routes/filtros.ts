@@ -57,6 +57,21 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       };
     }
 
+    // Leer en vivo la configuración de polling y permisos desde cfg_sistema_control
+    let configSistema = null;
+    try {
+      const cfgRes = await pool.request().query(`
+        IF OBJECT_ID('[DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]', 'U') IS NOT NULL
+          SELECT TOP 1 [Config_Json]
+          FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WITH (NOLOCK)
+          WHERE [Id] = 1;
+      `);
+      const rawJson = cfgRes.recordset?.[0]?.Config_Json;
+      if (rawJson) {
+        configSistema = JSON.parse(rawJson);
+      }
+    } catch {}
+
     res.json({
       periodos: cachedCatalogs.periodos,
       asesores: cachedCatalogs.asesores,
@@ -64,6 +79,7 @@ router.get(["/filtros", "/api/filtros"], async (_req: Request, res: Response) =>
       ultimaActualizacion: logs.etl.etiqueta,
       logsPorModulo: logs,
       versionSignature: getCombinedVersionSignature(),
+      configSistema,
     });
   } catch (error) {
     console.error("Error obteniendo filtros:", error);

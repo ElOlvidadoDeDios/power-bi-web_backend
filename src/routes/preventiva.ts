@@ -2,6 +2,7 @@
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
+import { sqlCaseAgencia } from "../lib/agencies";
 
 const router = Router();
 
@@ -22,15 +23,19 @@ router.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (req: Reque
           SELECT MAX([Fecha_Foto]) FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
         );
 
-        WITH BasePreventivaDWH AS (
+        WITH UltimoAsesor AS (
           SELECT
-            CASE R.[IdSAgencia]
-              WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba'
-              WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
-              WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
-              WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
-              WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia'
-            END AS [agencia],
+            RTRIM(LTRIM([IdSAsesor])) AS IdSAsesor,
+            ISNULL([AsesorNombresApellidos], [Asesor]) AS NombreAsesor,
+            ROW_NUMBER() OVER (
+              PARTITION BY RTRIM(LTRIM([IdSAsesor]))
+              ORDER BY [Periodo] DESC
+            ) AS rn
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+        ),
+        BasePreventivaDWH AS (
+          SELECT
+            ${sqlCaseAgencia("R.[IdSAgencia]")} AS [agencia],
             RTRIM(LTRIM(R.[Socio])) AS [socio],
             ISNULL(NULLIF(LTRIM(RTRIM(R.[Telefonos])), ''), 'SIN TELEFONO') AS [telefono],
             ISNULL(R.[Producto], '') AS [producto],
@@ -40,12 +45,8 @@ router.get(["/gestion-preventiva", "/api/gestion-preventiva"], async (req: Reque
             CONVERT(VARCHAR(10), R.[Fecha_Foto], 103) AS [fecha_vencimiento],
             ISNULL(R.[Dias_Atraso], 0) AS [dias_para_vencimiento]
           FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] R WITH (NOLOCK)
-          OUTER APPLY (
-            SELECT TOP 1 ISNULL(DA.[AsesorNombresApellidos], DA.[Asesor]) AS NombreAsesor
-            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] DA WITH (NOLOCK)
-            WHERE RTRIM(LTRIM(DA.[IdSAsesor])) = RTRIM(LTRIM(R.[IdSAsesor]))
-            ORDER BY DA.[Periodo] DESC
-          ) D_AS
+          LEFT JOIN UltimoAsesor D_AS
+            ON D_AS.IdSAsesor = RTRIM(LTRIM(R.[IdSAsesor])) AND D_AS.rn = 1
           WHERE R.[Fecha_Foto] = @UltimaFecha
             AND R.[Probabilidad_IA] >= 30
         )

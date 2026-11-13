@@ -1,3 +1,4 @@
+// D:\Proyectos\power-bi-web_backend\src\routes\calendario.ts
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
@@ -8,68 +9,37 @@ router.get(["/dias-laborales/:periodo", "/api/dias-laborales/:periodo"], async (
   const { periodo } = req.params;
 
   try {
-    const request = pool.request();
-    
-    const result = await request
-      .input('periodo', sql.VarChar(6), periodo)
+    const result = await pool
+      .request()
+      .input("periodo", sql.VarChar(6), periodo)
       .query(`
-        -- 1. Obtenemos Fecha y Hora de Perú (-5 UTC)
         DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
         DECLARE @Hoy DATE = CAST(@FechaHoraPeru AS DATE);
         DECLARE @Hora TIME = CAST(@FechaHoraPeru AS TIME);
 
-        -- 2. Buscamos el último día del mes (EndDate DAX)
-        DECLARE @EndDate DATE;
-        SELECT @EndDate = MAX(Fecha) 
+        DECLARE @EndDate DATE = (
+          SELECT MAX(Fecha) 
+          FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
+          WHERE Periodo = @periodo
+        );
+
+        DECLARE @CorteBase DATE = CASE WHEN @Hoy < @EndDate THEN @Hoy ELSE @EndDate END;
+        DECLARE @CorteExacto DATE = CASE
+          WHEN @CorteBase = @Hoy AND @Hora < '19:00:00' THEN DATEADD(day, -1, @CorteBase)
+          ELSE @CorteBase
+        END;
+
+        SELECT
+          COUNT(Fecha) AS totales,
+          ISNULL(SUM(CASE WHEN Fecha <= @CorteExacto THEN 1 ELSE 0 END), 0) AS transcurridos,
+          COUNT(Fecha) - ISNULL(SUM(CASE WHEN Fecha <= @CorteExacto THEN 1 ELSE 0 END), 0) AS restantes
         FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-        WHERE Periodo = @periodo;
-
-        -- 3. Definimos la regla de Corte Base
-        DECLARE @CorteBase DATE;
-        IF @Hoy < @EndDate
-            SET @CorteBase = @Hoy;
-        ELSE
-            SET @CorteBase = @EndDate;
-
-        -- 4. Regla de las 7:00 PM (19:00 hrs)
-        DECLARE @CorteExacto DATE;
-        IF @CorteBase = @Hoy AND @Hora < '19:00:00'
-            SET @CorteExacto = DATEADD(day, -1, @CorteBase);
-        ELSE
-            SET @CorteExacto = @CorteBase;
-
-        -- 5. Calculamos usando las variables
-        SELECT 
-            -- Días totales del mes que no son domingos ni feriados
-            (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-             WHERE Periodo = @periodo 
-               AND EsDomingo = 0 
-               AND EsFeriado = 0) AS totales,
-               
-            -- Días transcurridos hasta el corte
-            (SELECT COUNT(Fecha) 
-             FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-             WHERE Periodo = @periodo 
-               AND Fecha <= @CorteExacto 
-               AND EsDomingo = 0 
-               AND EsFeriado = 0) AS transcurridos,
-               
-            -- Días restantes (Totales - Transcurridos)
-            ((SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-              WHERE Periodo = @periodo 
-                AND EsDomingo = 0 
-                AND EsFeriado = 0) - 
-             (SELECT COUNT(Fecha) 
-              FROM [dm_productividad].[dbo].[dim_calendario] WITH (NOLOCK)
-              WHERE Periodo = @periodo 
-                AND Fecha <= @CorteExacto 
-                AND EsDomingo = 0 
-                AND EsFeriado = 0)) AS restantes
+        WHERE Periodo = @periodo
+          AND EsDomingo = 0
+          AND EsFeriado = 0;
       `);
 
-    res.json(result.recordset[0]);
+    res.json(result.recordset[0] || { totales: 0, transcurridos: 0, restantes: 0 });
   } catch (error) {
     console.error("Error en BD dm_productividad:", error);
     res.status(500).json({ error: "Error calculando días laborales" });

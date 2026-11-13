@@ -1,5 +1,4 @@
-//routes/index.ts
-
+// D:\Proyectos\power-bi-web_backend\src\routes\index.ts
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import preventivaRouter from "./preventiva";
@@ -8,16 +7,17 @@ import calendarioRouter from "./calendario";
 import gerenciaRouter from "./gerencia";
 import supervisionRouter from "./supervision";
 import agenciaRouter from "./agencia";
+import traspasosRecuperacionRoutes from "./traspasosRecuperacion";
 import asesoresRouter from "./asesores";
 import diariaRouter from "./diaria";
-import evolucionRoutes from './evolucion';
-import canceladosRoutes from './cancelados';
-import avanceRoutes from './avance';
-import rankingRoutes from './ranking';
-import moraRoutes from './mora';
-import pagosMoraRoutes from './pagosMora';
-import welcomeRoutes from './welcome';
-import productividadVivaRouter from './productividadViva';
+import evolucionRoutes from "./evolucion";
+import canceladosRoutes from "./cancelados";
+import avanceRoutes from "./avance";
+import rankingRoutes from "./ranking";
+import moraRoutes from "./mora";
+import pagosMoraRoutes from "./pagosMora";
+import welcomeRoutes from "./welcome";
+import productividadVivaRouter from "./productividadViva";
 import balanceGerencialRoutes from "./balanceGerencial";
 import moraProductoRoutes from "./moraProducto";
 import plazoFijoRoutes from "./plazoFijo";
@@ -31,6 +31,7 @@ router.use(calendarioRouter);
 router.use(gerenciaRouter);
 router.use(supervisionRouter);
 router.use(agenciaRouter);
+router.use(traspasosRecuperacionRoutes);
 router.use(asesoresRouter);
 router.use(diariaRouter);
 router.use(evolucionRoutes);

@@ -47,9 +47,14 @@ const buckets: Record<BucketName, CacheBucket> = {
     name: "mora",
     version: "",
     lastFormattedDate: "Sincronizando...",
-    description: "Motor de Mora, Productos, Compromisos e IA Preventiva",
+    description: "Motor de Mora, Productos, Traspasos, Compromisos e IA Preventiva",
     store: new Map(),
-    knownRoutes: new Set(["/api/mora", "/api/pagos-mora", "/api/mora-producto"]),
+    knownRoutes: new Set([
+      "/api/mora",
+      "/api/pagos-mora",
+      "/api/mora-producto",
+      "/api/traspasos-recuperacion",
+    ]),
   },
   vivo: {
     idLog: 5,
@@ -82,7 +87,13 @@ export function resolveBucket(path: string): CacheBucket {
   if (p.includes("balance-gerencial") || p.includes("plazo-fijo")) return buckets.balance;
   if (p.includes("cancelados") || p.includes("avance")) return buckets.gerencial;
   if (p.includes("ranking")) return buckets.ranking;
-  if (p.includes("mora") || p.includes("preventiva")) return buckets.mora;
+  if (
+    p.includes("mora") ||
+    p.includes("preventiva") ||
+    p.includes("traspasos-recuperacion")
+  ) {
+    return buckets.mora;
+  }
   return buckets.etl;
 }
 
@@ -128,6 +139,10 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
           `🔄 [SmartCache:${key.toUpperCase()} | Id=${bucket.idLog}] Cambio detectado (${bucket.lastFormattedDate}). Refrescando solo sus tablas...`
         );
         await refreshBucketRoutes(bucket, latestVer);
+        // Si cambia mora (Id=4), limpiamos también las rutas de welcome en etl para que vean la mora fresca al instante
+        if (key === "mora") {
+          buckets.etl.store.clear();
+        }
         anyChanged = true;
       }
     }
@@ -234,12 +249,12 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
     lastKnownBaseUrl = `http://127.0.0.1:${host.split(":")[1] || process.env.PORT || 3000}`;
   }
 
-  // Si es una petición POST, PUT o DELETE, limpiamos inmediatamente el bucket afectado tras completarse
   if (req.method !== "GET") {
     res.on("finish", () => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const target = resolveBucket(req.path);
         target.store.clear();
+        buckets.etl.store.clear();
         syncVersionsFromDatabase().catch(() => {});
       }
     });
