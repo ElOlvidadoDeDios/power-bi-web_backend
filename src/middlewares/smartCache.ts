@@ -143,6 +143,10 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
         if (key === "mora") {
           buckets.etl.store.clear();
         }
+        // ✅ Si cambian las Metas Diarias (Id=1 / etl), limpiamos también el caché de Productividad en Vivo
+        if (key === "etl") {
+          buckets.vivo.store.clear();
+        }
         anyChanged = true;
       }
     }
@@ -255,6 +259,7 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
         const target = resolveBucket(req.path);
         target.store.clear();
         buckets.etl.store.clear();
+        buckets.vivo.store.clear();
         syncVersionsFromDatabase().catch(() => {});
       }
     });

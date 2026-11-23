@@ -96,7 +96,8 @@ router.get(["/asesores/:periodo", "/api/asesores/:periodo"], async (req: Request
 
             ISNULL(S.SociosInicio, 0) AS sociosInicio,
             ISNULL(S.SociosActual, 0) AS sociosActual,
-            (ISNULL(S.SociosActual, 0) - ISNULL(S.SociosInicio, 0)) AS sociosNuevos,
+            (ISNULL(S.SociosActual, 0) - (ISNULL(S.SociosInicio, 0) - ISNULL(S.SociosRecuperacion, 0))) AS crecimientoSocios,
+            (ISNULL(S.SociosActual, 0) - (ISNULL(S.SociosInicio, 0) - ISNULL(S.SociosRecuperacion, 0) - ISNULL(S.SociosCancelados, 0))) AS sociosNuevos,
             ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
             ISNULL(S.SociosTraspasados, 0) AS sociosTraspasados,
             ISNULL(S.SociosRecuperacion, 0) AS sociosRecuperacion,

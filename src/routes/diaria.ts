@@ -1,116 +1,135 @@
+// D:\Proyectos\power-bi-web_backend\src\routes\diaria.ts
 import { Router, Request, Response } from "express";
 import sql from "mssql";
-import { pool } from '../lib/db';
+import { pool } from "../lib/db";
+import { resolveAgencyCode } from "../lib/agencies";
 
 const router = Router();
 
-router.get(["/diaria/:periodo", "/api/diaria/:periodo"], async (req: Request, res: Response) => {
-  const { periodo } = req.params;
-  const dayFilter = (req.query.day as string) || 'Hoy';
+router.get(["/productividad-diaria", "/api/productividad-diaria"], async (req: Request, res: Response) => {
+  const periodo = (req.query.periodo as string) || "";
+  const agencia = (req.query.agencia as string) || "Todas";
+  const asesor = (req.query.asesor as string) || "Todos";
+  const fecha = (req.query.fecha as string) || "Hoy";
+
+  const idAgencia = resolveAgencyCode(agencia);
 
   try {
     const request = pool.request();
-    
-    const result = await request
-      .input('periodo', sql.VarChar(6), periodo)
-      .input('dayFilter', sql.VarChar(20), dayFilter)
-      .query(`
-        DECLARE @FechaHoraPeru DATETIME = DATEADD(hour, -5, GETUTCDATE());
-        DECLARE @TargetDate DATE;
+    request.input("periodo", sql.VarChar(6), periodo);
+    request.input("idAgencia", sql.VarChar(2), idAgencia);
+    request.input("asesor", sql.VarChar(150), asesor);
+    request.input("fechaParam", sql.VarChar(20), fecha);
 
-        IF @dayFilter = 'Hoy'
-            SET @TargetDate = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
-        ELSE IF @dayFilter = 'Ayer'
-            SET @TargetDate = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
-        ELSE
-            BEGIN
-                BEGIN TRY
-                    SET @TargetDate = CAST(@dayFilter AS DATE);
-                END TRY
-                BEGIN CATCH
-                    SET @TargetDate = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
-                END CATCH
-            END
-        
-        IF NOT EXISTS (SELECT 1 FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) WHERE Fecha = @TargetDate)
-        BEGIN
-            SELECT TOP 1 @TargetDate = Fecha 
-            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK)
-            WHERE YEAR(Fecha)*100 + MONTH(Fecha) = CAST(@periodo AS INT)
-            ORDER BY Fecha DESC;
-        END
+    const querySQL = `
+      DECLARE @FechaObjetivo DATE;
 
-        -- 1. Resumen por Agencias (Con IdSAgencia normalizado a 2 caracteres)
-        ;WITH CTE_Agencias AS (
-            SELECT DISTINCT RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia 
-            FROM dm_productividad.dbo.FctMensual WITH (NOLOCK) 
-            WHERE Periodo = @periodo
-        ),
-        CTE_MetasProy AS (
-            SELECT 
-                RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2) AS IdSAgencia, 
-                SUM(ISNULL(ColocacionNumMeta, 0)) AS ColocacionNumMeta, 
-                SUM(ISNULL(ColocacionNumProy, 0)) AS ColocacionNumProy, 
-                SUM(ISNULL(ColocacionMontoMeta, 0)) AS ColocacionMontoMeta, 
-                SUM(ISNULL(ColocacionMontoProy, 0)) AS ColocacionMontoProy
-            FROM dm_productividad.dbo.FctDiario_MetaProy WITH (NOLOCK) 
-            WHERE Fecha = @TargetDate
-            GROUP BY RIGHT('00' + RTRIM(LTRIM(CAST(IdSAgencia AS VARCHAR(5)))), 2)
-        ),
-        CTE_Logrado AS (
-            SELECT 
-                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia, 
-                ISNULL(SUM(ColocacionNumReal), 0) AS achievedCount, 
-                ISNULL(SUM(ColocacionMontoReal), 0) AS achievedAmount
-            FROM DWH_Gestion_Cartera.dbo.fct_flow WITH (NOLOCK)
-            WHERE Periodo = @periodo AND CAST(Fecha AS DATE) = @TargetDate
-            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
-        )
-        SELECT 
-            CASE A.IdSAgencia 
-                WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' 
-                WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' 
-                WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' 
-                WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' 
-                WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
-            A.IdSAgencia AS idAgency,
-            ISNULL(M.ColocacionNumMeta, 0) AS targetCount,
-            ISNULL(M.ColocacionNumProy, 0) AS projectionCount,
-            ISNULL(L.achievedCount, 0) AS achievedCount,
-            ISNULL(M.ColocacionMontoMeta, 0) AS targetAmount,
-            ISNULL(M.ColocacionMontoProy, 0) AS projectionAmount,
-            ISNULL(L.achievedAmount, 0) AS achievedAmount
-        FROM CTE_Agencias A
-        LEFT JOIN CTE_MetasProy M ON A.IdSAgencia = M.IdSAgencia
-        LEFT JOIN CTE_Logrado L ON A.IdSAgencia = L.IdSAgencia
-        ORDER BY A.IdSAgencia ASC;
+      IF @fechaParam = 'Hoy'
+          SET @FechaObjetivo = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+      ELSE IF @fechaParam = 'Ayer'
+          SET @FechaObjetivo = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
+      ELSE
+          SET @FechaObjetivo = TRY_CAST(@fechaParam AS DATE);
 
-        -- 2. Detalle por Asesor para la tabla adicional
-        SELECT 
-            DA.AsesorNombresApellidos AS asesor,
-            CASE DA.IdSAgencia 
-                WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba' 
-                WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca' 
-                WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio' 
-                WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa' 
-                WHEN '13' THEN 'Pucallpa' ELSE 'Otra Agencia' END AS agency,
-            ISNULL(SUM(F.ColocacionNumReal), 0) AS operations,
-            ISNULL(SUM(F.ColocacionMontoReal), 0) AS disbursements,
-            @TargetDate AS fechaConsultada
-        FROM DWH_Gestion_Cartera.dbo.dim_asesor DA WITH (NOLOCK)
-        LEFT JOIN DWH_Gestion_Cartera.dbo.fct_flow F WITH (NOLOCK) ON DA.IdSAsesor = F.IdSAsesor AND F.Periodo = @periodo AND CAST(F.Fecha AS DATE) = @TargetDate
-        WHERE DA.Periodo = @periodo AND (DA.Cargo <> 'RECUPERADOR' OR DA.Cargo IS NULL)
-        GROUP BY DA.AsesorNombresApellidos, DA.IdSAgencia
-        ORDER BY operations DESC, disbursements DESC;
-      `);
+      IF @FechaObjetivo IS NULL
+          SET @FechaObjetivo = (
+              SELECT MAX(CAST(Fecha AS DATE)) 
+              FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
+              WHERE Periodo = @periodo
+          );
 
-    // 💡 Tipado seguro para evitar errores de índice en TS
-    const recordsets = result.recordsets as unknown as any[];
+      WITH Agencias AS (
+          SELECT * FROM (VALUES 
+              ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
+              ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+              ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+              ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+              ('13', 'Pucallpa')
+          ) AS t(IdSAgencia, NombreAgencia)
+      ),
+      MetasDiarias AS (
+          SELECT 
+              RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
+              ISNULL(SUM(Op_Faltantes_Dia), 0) AS metaOp,
+              ISNULL(SUM(Proy_Op_Admin), 0) AS proyOp,
+              ISNULL(SUM(Crec_Faltante_Dia), 0) AS metaMonto,
+              ISNULL(SUM(Proy_Monto_Admin), 0) AS proyMonto
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+          WHERE Fecha = @FechaObjetivo
+          GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
+      ),
+      AsesoresFiltrados AS (
+          SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          WHERE Periodo = @periodo 
+            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+      ),
+      RealDiario AS (
+          SELECT 
+              RTRIM(LTRIM(F.IdSAgencia)) AS IdSAgencia,
+              ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
+              ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
+          FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+          INNER JOIN AsesoresFiltrados A ON RTRIM(LTRIM(F.IdSAsesor)) = A.IdSAsesor
+          WHERE F.Periodo = @periodo
+            AND CAST(F.Fecha AS DATE) = @FechaObjetivo
+          GROUP BY RTRIM(LTRIM(F.IdSAgencia))
+      )
+      SELECT 
+          A.IdSAgencia AS idAgencia,
+          A.NombreAgencia AS agencia,
+          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaOp, 0) ELSE 0 END AS metaOp,
+          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyOp, 0) ELSE 0 END AS proyOp,
+          ISNULL(R.realOp, 0) AS realOp,
+          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaMonto, 0) ELSE 0 END AS metaMonto,
+          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyMonto, 0) ELSE 0 END AS proyMonto,
+          ISNULL(R.realMonto, 0) AS realMonto
+      FROM Agencias A
+      LEFT JOIN MetasDiarias M ON A.IdSAgencia = M.IdSAgencia
+      LEFT JOIN RealDiario R ON A.IdSAgencia = R.IdSAgencia
+      WHERE (@idAgencia = '' OR A.IdSAgencia = @idAgencia)
+      ORDER BY A.IdSAgencia ASC;
+
+      WITH AsesoresDetalle AS (
+          SELECT 
+              RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+              MAX(Asesor) AS nombreAsesor,
+              MAX(RTRIM(LTRIM(IdSAgencia))) AS IdSAgencia
+          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+          WHERE Periodo = @periodo 
+            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+            AND (@idAgencia = '' OR RTRIM(LTRIM(IdSAgencia)) = @idAgencia)
+            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+          GROUP BY RTRIM(LTRIM(IdSAsesor))
+      )
+      SELECT 
+          A.nombreAsesor AS asesor,
+          CASE A.IdSAgencia
+              WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba'
+              WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
+              WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
+              WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
+              WHEN '13' THEN 'Pucallpa' ELSE 'Otra'
+          END AS agencia,
+          ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
+          ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
+      FROM AsesoresDetalle A
+      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+          ON A.IdSAsesor = RTRIM(LTRIM(F.IdSAsesor)) 
+          AND F.Periodo = @periodo 
+          AND CAST(F.Fecha AS DATE) = @FechaObjetivo
+      GROUP BY A.IdSAsesor, A.nombreAsesor, A.IdSAgencia
+      HAVING ISNULL(SUM(F.ColocacionNumReal), 0) > 0 OR @asesor <> 'Todos'
+      ORDER BY realMonto DESC, realOp DESC;
+    `;
+
+    const result = await request.query(querySQL);
+    const sets = result.recordsets as any[];
 
     res.json({
-        agencias: recordsets[0],
-        asesores: recordsets[1],
-        fechaConsultada: recordsets[1]?.[0]?.fechaConsultada || new Date()
+      agencias: sets[0] || [],
+      asesores: sets[1] || [],
     });
   } catch (error) {
     console.error("Error obteniendo Productividad Diaria:", error);

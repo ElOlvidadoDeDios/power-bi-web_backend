@@ -24,46 +24,35 @@ router.get(["/productividad-en-vivo", "/api/productividad-en-vivo"], async (req:
             ('13', 'Pucallpa')
           ) AS t(IdSAgencia, NombreAgencia)
         ),
-        MetasHoy AS (
-          SELECT
-            RIGHT('00' + CAST(IdSAgencia AS VARCHAR(2)), 2) AS IdSAgencia,
-            ISNULL(ColocacionNumProy, 0) AS proyOpDia,
-            ISNULL(ColocacionMontoProy, 0) AS proyMontoDia
-          FROM [dm_productividad].[dbo].[FctDiario_MetaProy] WITH (NOLOCK)
-          WHERE Fecha = @Hoy
-        ),
         ControlHoy AS (
           SELECT
-            IdSAgencia,
-            Proy_Op_Admin,
-            Proy_Monto_Admin,
-            Sugerencia_Op_Gerencia,
-            Sugerencia_Monto_Gerencia
+            RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
+            CAST(ROUND(ISNULL(Proy_Op_Admin, 0), 0) AS INT) AS Proy_Op_Admin,
+            CAST(ROUND(ISNULL(Proy_Monto_Admin, 0), 0) AS FLOAT) AS Proy_Monto_Admin
           FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
           WHERE Fecha = @Hoy
         ),
         VivoHoy AS (
           SELECT
-            RTRIM(LTRIM(IdSAgencia)) AS IdSAgencia,
+            RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
             CONVERT(VARCHAR(10), [Fecha], 120) AS Fecha,
             [Periodo],
             SUM([ColocacionNumReal]) AS colocacionNumReal,
             SUM([ColocacionMontoReal]) AS colocacionMontoReal
           FROM [DWH_Gestion_Cartera].[dbo].[fct_productividad_en_vivo_log] WITH (NOLOCK)
           WHERE [Fecha] = @Hoy
-          GROUP BY RTRIM(LTRIM(IdSAgencia)), [Fecha], [Periodo]
+          GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2), [Fecha], [Periodo]
         )
         SELECT
           ISNULL(V.Fecha, CONVERT(VARCHAR(10), @Hoy, 120)) AS fecha,
           ISNULL(V.Periodo, @PeriodoDefault) AS periodo,
           A.IdSAgencia AS idAgencia,
           A.NombreAgencia AS agencia,
-          COALESCE(C.Proy_Op_Admin, M.proyOpDia, C.Sugerencia_Op_Gerencia, 0) AS proyeccionColocacion,
-          COALESCE(C.Proy_Monto_Admin, M.proyMontoDia, C.Sugerencia_Monto_Gerencia, 0) AS proyeccionMonto,
+          ISNULL(C.Proy_Op_Admin, 0) AS proyeccionColocacion,
+          ISNULL(C.Proy_Monto_Admin, 0) AS proyeccionMonto,
           ISNULL(V.colocacionNumReal, 0) AS colocacionNumReal,
           ISNULL(V.colocacionMontoReal, 0) AS colocacionMontoReal
         FROM Agencias A
-        LEFT JOIN MetasHoy M ON A.IdSAgencia = M.IdSAgencia
         LEFT JOIN ControlHoy C ON A.IdSAgencia = C.IdSAgencia
         LEFT JOIN VivoHoy V ON A.IdSAgencia = V.IdSAgencia
         ORDER BY A.IdSAgencia ASC;

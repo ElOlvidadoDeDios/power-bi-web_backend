@@ -156,6 +156,7 @@ router.get(["/supervision/:periodo", "/api/supervision/:periodo"], async (req: R
             ISNULL(F.Repagos, 0) AS repagos,
             ISNULL(S.SociosCancelados, 0) AS sociosCancelados,
             ISNULL(S.NroSociosRecuperacion, 0) AS sociosRecuperacion,
+            (ISNULL(S.SociosActual, 0) - (ISNULL(S.SociosInicio, 0) - ISNULL(S.NroSociosRecuperacion, 0))) AS crecimientoSocios,
             ISNULL(S.SociosActivos, 0) AS sociosActivos,
             CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraCPP, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraCpp,
             CASE WHEN ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) > 0 THEN (ISNULL(S.MoraDeficiente, 0) / CAST(ISNULL(NULLIF(MS.CarteraInicial, 0), ISNULL(S.Cartera, 0)) AS FLOAT)) * 100 ELSE 0 END AS pctMoraDef,
