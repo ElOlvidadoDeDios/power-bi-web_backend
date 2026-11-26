@@ -21147,27 +21147,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router23;
+    module.exports = Router24;
     module.exports.Route = Route;
-    function Router23(options) {
-      if (!(this instanceof Router23)) {
-        return new Router23(options);
+    function Router24(options) {
+      if (!(this instanceof Router24)) {
+        return new Router24(options);
       }
       const opts = options || {};
-      function router23(req, res, next) {
-        router23.handle(req, res, next);
+      function router24(req, res, next) {
+        router24.handle(req, res, next);
       }
-      Object.setPrototypeOf(router23, this);
-      router23.caseSensitive = opts.caseSensitive;
-      router23.mergeParams = opts.mergeParams;
-      router23.params = {};
-      router23.strict = opts.strict;
-      router23.stack = [];
-      return router23;
+      Object.setPrototypeOf(router24, this);
+      router24.caseSensitive = opts.caseSensitive;
+      router24.mergeParams = opts.mergeParams;
+      router24.params = {};
+      router24.strict = opts.strict;
+      router24.stack = [];
+      return router24;
     }
-    Router23.prototype = function() {
+    Router24.prototype = function() {
     };
-    Router23.prototype.param = function param(name, fn) {
+    Router24.prototype.param = function param(name, fn) {
       if (!name) {
         throw new TypeError("argument name is required");
       }
@@ -21187,7 +21187,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router23.prototype.handle = function handle(req, res, callback) {
+    Router24.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21314,7 +21314,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router23.prototype.use = function use(handler) {
+    Router24.prototype.use = function use(handler) {
       let offset = 0;
       let path = "/";
       if (typeof handler !== "function") {
@@ -21347,7 +21347,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router23.prototype.route = function route(path) {
+    Router24.prototype.route = function route(path) {
       const route2 = new Route(path);
       const layer = new Layer(path, {
         sensitive: this.caseSensitive,
@@ -21362,7 +21362,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router23.prototype[method] = function(path) {
+      Router24.prototype[method] = function(path) {
         const route = this.route(path);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21545,13 +21545,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve = __require("node:path").resolve;
     var once = require_once();
-    var Router23 = require_router();
+    var Router24 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router23 = null;
+      var router24 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21560,13 +21560,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router23 === null) {
-            router23 = new Router23({
+          if (router24 === null) {
+            router24 = new Router24({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router23;
+          return router24;
         }
       });
     };
@@ -21637,15 +21637,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router23 = this.router;
+      var router24 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router23.use(path, fn2);
+          return router24.use(path, fn2);
         }
         debug(".use app under %s", path);
         fn2.mountpath = path;
         fn2.parent = this;
-        router23.use(path, function mounted_app(req, res, next) {
+        router24.use(path, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -24234,7 +24234,7 @@ var require_express = __commonJS({
     var EventEmitter = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router23 = require_router();
+    var Router24 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24256,8 +24256,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router23.Route;
-    exports.Router = Router23;
+    exports.Route = Router24.Route;
+    exports.Router = Router24;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28871,7 +28871,7 @@ var require_pino = __commonJS({
 var import_dotenv2 = __toESM(require_main(), 1);
 
 // src/app.ts
-var import_express23 = __toESM(require_express2(), 1);
+var import_express24 = __toESM(require_express2(), 1);
 
 // src/middlewares/errorHandler.ts
 var errorHandler = (err, req, res, next) => {
@@ -28902,7 +28902,7 @@ var errorHandler = (err, req, res, next) => {
 var import_cors = __toESM(require_lib3(), 1);
 
 // src/routes/index.ts
-var import_express22 = __toESM(require_express2(), 1);
+var import_express23 = __toESM(require_express2(), 1);
 
 // src/routes/health.ts
 var import_express = __toESM(require_express2(), 1);
@@ -34428,13 +34428,22 @@ var AGENCY_NAMES = {
   "13": "Pucallpa",
   "98": "Agencia Digital (98)"
 };
+var normalizeText = (val) => val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 var NAME_TO_CODE = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([code, name]) => [name.toLowerCase(), code])
+  Object.entries(AGENCY_NAMES).map(([code, name]) => [normalizeText(name), code])
 );
 function resolveAgencyCode(agenciaParam) {
-  const raw = String(agenciaParam || "").trim();
-  if (!raw || raw === "Todas" || raw === "Todas las Agencias") return "";
-  return NAME_TO_CODE[raw.toLowerCase()] || raw.padStart(2, "0");
+  const raw = String(agenciaParam ?? "").split(",")[0].trim();
+  const norm = normalizeText(raw);
+  if (!raw || ["todas", "todas las agencias", "null", "undefined", "all"].includes(norm)) {
+    return "";
+  }
+  if (NAME_TO_CODE[norm]) return NAME_TO_CODE[norm];
+  if (norm === "oficina principal" || norm === "principal") return "01";
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  const code = digits.padStart(2, "0").slice(-2);
+  return AGENCY_NAMES[code] ? code : "";
 }
 function sqlCaseAgencia(colExpr) {
   return `
@@ -34590,6 +34599,8 @@ function resolveBucket(path) {
   return buckets.etl;
 }
 async function syncVersionsFromDatabase() {
+  if (isChecking) return false;
+  isChecking = true;
   try {
     const result = await pool.request().query(`
       SELECT
@@ -34631,12 +34642,18 @@ async function syncVersionsFromDatabase() {
   } catch (err) {
     console.error("\u26A0\uFE0F [SmartCache] Error leyendo versiones SQL:", err);
     return false;
+  } finally {
+    isChecking = false;
   }
 }
 async function refreshBucketRoutes(bucket, newVersion) {
-  const routesToWarm = Array.from(bucket.knownRoutes);
   bucket.store.clear();
   bucket.version = newVersion;
+  if (bucket.name === "gerencial") {
+    console.log(`\u2705 [SmartCache:GERENCIAL] Cach\xE9 invalidado en RAM (recarga bajo demanda).`);
+    return;
+  }
+  const routesToWarm = Array.from(bucket.knownRoutes);
   if (routesToWarm.length === 0) return;
   const start = Date.now();
   for (let i = 0; i < routesToWarm.length; i += 4) {
@@ -34655,14 +34672,9 @@ async function refreshBucketRoutes(bucket, newVersion) {
   );
 }
 function startCacheWatcher() {
-  const checkLoop = async () => {
-    if (isChecking) return;
-    isChecking = true;
-    try {
-      await syncVersionsFromDatabase();
-    } finally {
-      isChecking = false;
-    }
+  const checkLoop = () => {
+    syncVersionsFromDatabase().catch(() => {
+    });
   };
   setTimeout(checkLoop, 1e3);
   setInterval(checkLoop, 1e4);
@@ -34760,7 +34772,7 @@ async function smartCacheMiddleware(req, res, next) {
   res.json = (body) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
-      if (activeBucket.knownRoutes.size < 25 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
+      if (activeBucket.name !== "gerencial" && activeBucket.knownRoutes.size < 25 && req.originalUrl && (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))) {
         activeBucket.knownRoutes.add(req.originalUrl);
       }
     }
@@ -35427,25 +35439,6 @@ var agencia_default = router7;
 var import_express8 = __toESM(require_express2(), 1);
 import sql7 from "mssql";
 var router8 = (0, import_express8.Router)();
-var AGENCY_NAMES2 = {
-  "01": "Wanchaq",
-  "02": "San Jer\xF3nimo",
-  "03": "Quillabamba",
-  "04": "Sicuani",
-  "05": "Molino",
-  "06": "Juliaca",
-  "07": "Lima Los Olivos",
-  "08": "Tica Tica",
-  "09": "Magisterio",
-  "10": "Lima SJL",
-  "11": "Chiclayo",
-  "12": "Arequipa",
-  "13": "Pucallpa",
-  "98": "Agencia Digital (98)"
-};
-var NAME_TO_CODE2 = Object.fromEntries(
-  Object.entries(AGENCY_NAMES2).map(([code, name]) => [name.toLowerCase(), code])
-);
 var tableEnsured = false;
 async function ensureTraspasosTable() {
   if (tableEnsured) return;
@@ -35491,23 +35484,21 @@ router8.get(
       await ensureTraspasosTable();
       const d = /* @__PURE__ */ new Date();
       const defaultPer = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const periodo = String(req.query.periodo || defaultPer).trim();
+      const periodo = String(req.query.periodo || defaultPer).replace(/[^0-9]/g, "").slice(0, 6) || defaultPer;
       const agenciaParam = String(req.query.agencia || "Todas").trim();
       const asesorOrigenParam = String(req.query.asesorOrigen || "Todos").trim();
       const recuperadorParam = String(req.query.recuperador || "Todos").trim();
-      const searchParam = String(req.query.search || "").trim();
+      const searchParam = String(req.query.search || "").trim().slice(0, 150);
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
       const limit = Math.max(parseInt(req.query.limit, 10) || 100, 1);
       const offset = (page - 1) * limit;
-      let codAgencia = "";
-      if (agenciaParam !== "Todas" && agenciaParam !== "Todas las Agencias" && agenciaParam !== "") {
-        codAgencia = NAME_TO_CODE2[agenciaParam.toLowerCase()] || agenciaParam.padStart(2, "0");
-      }
-      const asesorOrigen = asesorOrigenParam === "Todos" || asesorOrigenParam === "Todas" ? "" : asesorOrigenParam;
-      const recuperador = recuperadorParam === "Todos" || recuperadorParam === "Todas" ? "" : recuperadorParam;
+      const resolvedAge = resolveAgencyCode(agenciaParam);
+      const codAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
+      const asesorOrigen = asesorOrigenParam === "Todos" || asesorOrigenParam === "Todas" ? "" : asesorOrigenParam.slice(0, 150);
+      const recuperador = recuperadorParam === "Todos" || recuperadorParam === "Todas" ? "" : recuperadorParam.slice(0, 150);
       const request = pool.request();
       request.input("periodo", sql7.VarChar(6), periodo);
-      request.input("agencia", sql7.VarChar(5), codAgencia);
+      request.input("agencia", sql7.VarChar(2), codAgencia);
       request.input("asesorOrigen", sql7.VarChar(150), asesorOrigen);
       request.input("recuperador", sql7.VarChar(150), recuperador);
       request.input("search", sql7.VarChar(150), searchParam);
@@ -35613,7 +35604,7 @@ router8.get(
           const cr = Number(r.capitalRecuperado || 0);
           return {
             ...r,
-            agencia: AGENCY_NAMES2[r.idAgencia] || `Agencia ${r.idAgencia}`,
+            agencia: AGENCY_NAMES[r.idAgencia] || `Agencia ${r.idAgencia}`,
             nroSocios: Number(r.nroSocios || 0),
             nroCreditos: Number(r.nroCreditos || 0),
             saldoTransferido: st,
@@ -35626,7 +35617,7 @@ router8.get(
         });
         const detalle2 = (sets[2] || []).map((r) => ({
           ...r,
-          agencia: AGENCY_NAMES2[r.idAgencia] || `Agencia ${r.idAgencia}`
+          agencia: AGENCY_NAMES[r.idAgencia] || `Agencia ${r.idAgencia}`
         }));
         return res.json({
           kpis: {
@@ -35677,7 +35668,7 @@ router8.get(
       `);
       const detalle = (pageRes.recordset || []).map((r) => ({
         ...r,
-        agencia: AGENCY_NAMES2[r.idAgencia] || `Agencia ${r.idAgencia}`
+        agencia: AGENCY_NAMES[r.idAgencia] || `Agencia ${r.idAgencia}`
       }));
       res.json({ detalle });
     } catch (error2) {
@@ -35815,131 +35806,153 @@ var asesores_default = router9;
 var import_express10 = __toESM(require_express2(), 1);
 import sql9 from "mssql";
 var router10 = (0, import_express10.Router)();
-router10.get(["/productividad-diaria", "/api/productividad-diaria"], async (req, res) => {
-  const periodo = req.query.periodo || "";
-  const agencia = req.query.agencia || "Todas";
-  const asesor = req.query.asesor || "Todos";
-  const fecha = req.query.fecha || "Hoy";
-  const idAgencia = resolveAgencyCode(agencia);
-  try {
-    const request = pool.request();
-    request.input("periodo", sql9.VarChar(6), periodo);
-    request.input("idAgencia", sql9.VarChar(2), idAgencia);
-    request.input("asesor", sql9.VarChar(150), asesor);
-    request.input("fechaParam", sql9.VarChar(20), fecha);
-    const querySQL = `
-      DECLARE @FechaObjetivo DATE;
+router10.get(
+  [
+    "/diaria/:periodo",
+    "/diaria",
+    "/productividad-diaria",
+    "/api/diaria/:periodo",
+    "/api/diaria",
+    "/api/productividad-diaria"
+  ],
+  async (req, res) => {
+    const rawPeriodo = String(req.params.periodo || req.query.periodo || "");
+    const periodo = rawPeriodo.replace(/[^0-9]/g, "").slice(0, 6);
+    const agencia = String(req.query.agencia || "Todas").trim();
+    const asesor = String(req.query.asesor || "Todos").trim();
+    const fecha = String(req.query.day || req.query.fecha || "Hoy").trim();
+    const firstAge = agencia.split(",")[0].trim();
+    const resolvedAge = resolveAgencyCode(firstAge);
+    const idAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
+    try {
+      const request = pool.request();
+      request.input("periodo", sql9.VarChar(6), periodo);
+      request.input("idAgencia", sql9.VarChar(2), idAgencia);
+      request.input("asesor", sql9.VarChar(150), asesor);
+      request.input("fechaParam", sql9.VarChar(20), fecha);
+      const querySQL = `
+        DECLARE @PeriodoEfectivo VARCHAR(6) = @periodo;
+        IF @PeriodoEfectivo = ''
+            SET @PeriodoEfectivo = CONVERT(VARCHAR(6), DATEADD(hour, -5, GETUTCDATE()), 112);
 
-      IF @fechaParam = 'Hoy'
-          SET @FechaObjetivo = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
-      ELSE IF @fechaParam = 'Ayer'
-          SET @FechaObjetivo = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
-      ELSE
-          SET @FechaObjetivo = TRY_CAST(@fechaParam AS DATE);
+        DECLARE @FechaObjetivo DATE;
 
-      IF @FechaObjetivo IS NULL
-          SET @FechaObjetivo = (
-              SELECT MAX(CAST(Fecha AS DATE)) 
-              FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
-              WHERE Periodo = @periodo
-          );
+        IF @fechaParam = 'Hoy'
+            SET @FechaObjetivo = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+        ELSE IF @fechaParam = 'Ayer'
+            SET @FechaObjetivo = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
+        ELSE
+            SET @FechaObjetivo = COALESCE(
+                TRY_CONVERT(DATE, @fechaParam, 23),
+                TRY_CONVERT(DATE, @fechaParam, 103),
+                TRY_CAST(@fechaParam AS DATE)
+            );
 
-      WITH Agencias AS (
-          SELECT * FROM (VALUES 
-              ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
-              ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
-              ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
-              ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
-              ('13', 'Pucallpa')
-          ) AS t(IdSAgencia, NombreAgencia)
-      ),
-      MetasDiarias AS (
-          SELECT 
-              RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
-              ISNULL(SUM(Op_Faltantes_Dia), 0) AS metaOp,
-              ISNULL(SUM(Proy_Op_Admin), 0) AS proyOp,
-              ISNULL(SUM(Crec_Faltante_Dia), 0) AS metaMonto,
-              ISNULL(SUM(Proy_Monto_Admin), 0) AS proyMonto
-          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
-          WHERE Fecha = @FechaObjetivo
-          GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
-      ),
-      AsesoresFiltrados AS (
-          SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
-          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE Periodo = @periodo 
-            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
-      ),
-      RealDiario AS (
-          SELECT 
-              RTRIM(LTRIM(F.IdSAgencia)) AS IdSAgencia,
-              ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
-              ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
-          FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
-          INNER JOIN AsesoresFiltrados A ON RTRIM(LTRIM(F.IdSAsesor)) = A.IdSAsesor
-          WHERE F.Periodo = @periodo
+        IF @FechaObjetivo IS NULL
+            SET @FechaObjetivo = (
+                SELECT MAX(CAST(Fecha AS DATE)) 
+                FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
+                WHERE Periodo = @PeriodoEfectivo
+            );
+
+        WITH Agencias AS (
+            SELECT * FROM (VALUES 
+                ('01', 'Wanchaq'), ('02', 'San Jer\xF3nimo'), ('03', 'Quillabamba'),
+                ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+                ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+                ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+                ('13', 'Pucallpa')
+            ) AS t(IdSAgencia, NombreAgencia)
+        ),
+        MetasDiarias AS (
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
+                ISNULL(SUM(Op_Faltantes_Dia), 0) AS metaOp,
+                ISNULL(SUM(Proy_Op_Admin), 0) AS proyOp,
+                ISNULL(SUM(Crec_Faltante_Dia), 0) AS metaMonto,
+                ISNULL(SUM(Proy_Monto_Admin), 0) AS proyMonto
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+            WHERE Fecha = @FechaObjetivo
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
+        ),
+        AsesoresFiltrados AS (
+            SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+            WHERE Periodo = @PeriodoEfectivo 
+              AND (Cargo NOT LIKE '%RECUPER%' OR Cargo IS NULL)
+              AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+        ),
+        RealDiario AS (
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(F.IdSAgencia)), 2) AS IdSAgencia,
+                ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
+                ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+            INNER JOIN AsesoresFiltrados A ON RTRIM(LTRIM(F.IdSAsesor)) = A.IdSAsesor
+            WHERE F.Periodo = @PeriodoEfectivo
+              AND CAST(F.Fecha AS DATE) = @FechaObjetivo
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(F.IdSAgencia)), 2)
+        )
+        SELECT 
+            A.IdSAgencia AS idAgencia,
+            A.NombreAgencia AS agency,
+            A.NombreAgencia AS agencia,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaOp, 0) ELSE 0 END AS targetCount,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyOp, 0) ELSE 0 END AS projectionCount,
+            ISNULL(R.realOp, 0) AS achievedCount,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaMonto, 0) ELSE 0 END AS targetAmount,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyMonto, 0) ELSE 0 END AS projectionAmount,
+            ISNULL(R.realMonto, 0) AS achievedAmount
+        FROM Agencias A
+        LEFT JOIN MetasDiarias M ON A.IdSAgencia = M.IdSAgencia
+        LEFT JOIN RealDiario R ON A.IdSAgencia = R.IdSAgencia
+        WHERE (@idAgencia = '' OR A.IdSAgencia = @idAgencia)
+        ORDER BY A.IdSAgencia ASC;
+
+        WITH AsesoresDetalle AS (
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                MAX(ISNULL(AsesorNombresApellidos, Asesor)) AS nombreAsesor,
+                MAX(RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)) AS IdSAgencia
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+            WHERE Periodo = @PeriodoEfectivo 
+              AND (Cargo NOT LIKE '%RECUPER%' OR Cargo IS NULL)
+              AND (@idAgencia = '' OR RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) = @idAgencia)
+              AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
+        )
+        SELECT 
+            A.nombreAsesor AS asesor,
+            CASE A.IdSAgencia
+                WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba'
+                WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
+                WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
+                WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
+                WHEN '13' THEN 'Pucallpa' ELSE 'Otra'
+            END AS agency,
+            ISNULL(SUM(F.ColocacionNumReal), 0) AS operations,
+            ISNULL(SUM(F.ColocacionMontoReal), 0) AS disbursements
+        FROM AsesoresDetalle A
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+            ON A.IdSAsesor = RTRIM(LTRIM(F.IdSAsesor)) 
+            AND F.Periodo = @PeriodoEfectivo 
             AND CAST(F.Fecha AS DATE) = @FechaObjetivo
-          GROUP BY RTRIM(LTRIM(F.IdSAgencia))
-      )
-      SELECT 
-          A.IdSAgencia AS idAgencia,
-          A.NombreAgencia AS agencia,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaOp, 0) ELSE 0 END AS metaOp,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyOp, 0) ELSE 0 END AS proyOp,
-          ISNULL(R.realOp, 0) AS realOp,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaMonto, 0) ELSE 0 END AS metaMonto,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyMonto, 0) ELSE 0 END AS proyMonto,
-          ISNULL(R.realMonto, 0) AS realMonto
-      FROM Agencias A
-      LEFT JOIN MetasDiarias M ON A.IdSAgencia = M.IdSAgencia
-      LEFT JOIN RealDiario R ON A.IdSAgencia = R.IdSAgencia
-      WHERE (@idAgencia = '' OR A.IdSAgencia = @idAgencia)
-      ORDER BY A.IdSAgencia ASC;
-
-      WITH AsesoresDetalle AS (
-          SELECT 
-              RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
-              MAX(Asesor) AS nombreAsesor,
-              MAX(RTRIM(LTRIM(IdSAgencia))) AS IdSAgencia
-          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE Periodo = @periodo 
-            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-            AND (@idAgencia = '' OR RTRIM(LTRIM(IdSAgencia)) = @idAgencia)
-            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
-          GROUP BY RTRIM(LTRIM(IdSAsesor))
-      )
-      SELECT 
-          A.nombreAsesor AS asesor,
-          CASE A.IdSAgencia
-              WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jer\xF3nimo' WHEN '03' THEN 'Quillabamba'
-              WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
-              WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
-              WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
-              WHEN '13' THEN 'Pucallpa' ELSE 'Otra'
-          END AS agencia,
-          ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
-          ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
-      FROM AsesoresDetalle A
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
-          ON A.IdSAsesor = RTRIM(LTRIM(F.IdSAsesor)) 
-          AND F.Periodo = @periodo 
-          AND CAST(F.Fecha AS DATE) = @FechaObjetivo
-      GROUP BY A.IdSAsesor, A.nombreAsesor, A.IdSAgencia
-      HAVING ISNULL(SUM(F.ColocacionNumReal), 0) > 0 OR @asesor <> 'Todos'
-      ORDER BY realMonto DESC, realOp DESC;
-    `;
-    const result = await request.query(querySQL);
-    const sets = result.recordsets;
-    res.json({
-      agencias: sets[0] || [],
-      asesores: sets[1] || []
-    });
-  } catch (error2) {
-    console.error("Error obteniendo Productividad Diaria:", error2);
-    res.status(500).json({ error: "Error calculando productividad diaria" });
+        GROUP BY A.IdSAsesor, A.nombreAsesor, A.IdSAgencia
+        HAVING ISNULL(SUM(F.ColocacionNumReal), 0) > 0 OR @asesor <> 'Todos'
+        ORDER BY disbursements DESC, operations DESC;
+      `;
+      const result = await request.query(querySQL);
+      const sets = result.recordsets;
+      res.json({
+        agencias: sets[0] || [],
+        asesores: sets[1] || []
+      });
+    } catch (error2) {
+      console.error("Error obteniendo Productividad Diaria:", error2);
+      res.status(500).json({ error: "Error calculando productividad diaria" });
+    }
   }
-});
+);
 var diaria_default = router10;
 
 // src/routes/evolucion.ts
@@ -36251,8 +36264,8 @@ router13.get(["/avance", "/api/avance"], async (req, res) => {
   const page = Math.max(parseInt(req.query.page) || 1, 1);
   const limit = Math.max(parseInt(req.query.limit) || 100, 1);
   const offset = (page - 1) * limit;
-  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim();
-  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
+  const agencia = agenciaParam === "Todas" || agenciaParam === "Todas las Agencias" ? "" : agenciaParam.trim().slice(0, 50);
+  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim().slice(0, 100);
   try {
     await ensureAvanceCols();
     const request = pool.request();
@@ -36264,6 +36277,7 @@ router13.get(["/avance", "/api/avance"], async (req, res) => {
           CAST(ROUND(AVG(CAST(ISNULL([Dias_Atraso], 0) AS FLOAT)), 1) AS DECIMAL(10, 1)) AS Prom_Riesgo,
           MAX(ISNULL([Dias_Atraso], 0)) AS Max_Riesgo
         FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        WHERE [Fecha_Foto] >= DATEADD(day, -30, CAST(GETDATE() AS DATE))
         GROUP BY LTRIM(RTRIM([Pagare]))
       ),
       BaseAvance AS (
@@ -36552,9 +36566,6 @@ var pagosMora_default = router16;
 var import_express17 = __toESM(require_express2(), 1);
 import sql13 from "mssql";
 var router17 = (0, import_express17.Router)();
-var NAME_TO_CODE3 = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([k, v]) => [v.toUpperCase(), k])
-);
 var tablesEnsured = false;
 async function ensureWelcomeTables() {
   if (tablesEnsured) return;
@@ -36670,7 +36681,7 @@ router17.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
     await ensureWelcomeTables();
     const periodoReq = req.query.periodo || "";
     const agenciaCodeReq = req.query.id_age || "";
-    const asesorReq = (req.query.asesor || "").trim();
+    const asesorReq = (req.query.asesor || "").trim().slice(0, 150);
     const [periodosRes, autoCalcFaltantesDiarios] = await Promise.all([
       pool.request().query(`
         SELECT DISTINCT RTRIM(LTRIM([Periodo])) AS Periodo 
@@ -36681,8 +36692,17 @@ router17.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
       leerFlagAutoCalcFaltantes()
     ]);
     const periodosDisponibles = periodosRes.recordset.map((p) => p.Periodo);
-    const periodo = periodoReq || periodosDisponibles[0] || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7).replace("-", "");
-    const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
+    const cleanPeriodoReq = String(periodoReq || "").replace(/[^0-9]/g, "").slice(0, 6);
+    const periodo = cleanPeriodoReq || periodosDisponibles[0] || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7).replace("-", "");
+    const resolvedAge = resolveAgencyCode(agenciaCodeReq);
+    const idAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
+    if (agenciaCodeReq && agenciaCodeReq.trim().length > 2 && !["todas", "todas las agencias", "null", "undefined"].includes(
+      agenciaCodeReq.trim().toLowerCase()
+    )) {
+      console.warn(
+        `\u26A0\uFE0F [/welcome/init] id_age recibido con >2 chars: "${agenciaCodeReq}" -> normalizado a "${idAgencia}"`
+      );
+    }
     await pool.request().input("periodo", sql13.VarChar(6), periodo).query(`
       IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
       BEGIN
@@ -37011,10 +37031,8 @@ router17.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
             B.NombreAgencia AS agencia,
             B.opFaltantesFinal AS opFaltantesDia,
             B.crecFaltanteFinal AS crecFaltanteDia,
-            -- \u2705 Regla de sugerencia para los Administradores de Agencia: Faltante + 1 en Op y Faltante + 500 en Monto
             (B.opFaltantesFinal + 1) AS sugerenciaOpGerencia,
             (B.crecFaltanteFinal + 500) AS sugerenciaMontoGerencia,
-            -- \u2705 Proyecciones ingresadas (0 si a\xFAn est\xE1 pendiente)
             B.proyOpConfirmada AS proyeccionColocacion,
             B.proyMontoConfirmada AS proyeccionMonto,
             ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
@@ -37211,7 +37229,7 @@ router17.get(["/welcome/init", "/api/welcome/init"], async (req, res) => {
         FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WITH (NOLOCK)
         ORDER BY [UltimaActualizacion] DESC
       `),
-      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día  👈 2. AGREGAR AQUÍ
+      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día
       pool.request().query(`
           SELECT *
           FROM [DWH_Gestion_Cartera].[dbo].[fct_proyeccion_repagos_agencia] WITH (NOLOCK)
@@ -37267,7 +37285,7 @@ router17.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (r
         ...fullJson.daemon || {},
         autoCalcFaltantesDiarios
       };
-      await pool.request().input("json", sql13.NVarChar(sql13.MAX), JSON.stringify(fullJson)).input("autor", sql13.VarChar(150), String(usuarioNombre || "Super Admin")).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).query(`
+      await pool.request().input("json", sql13.NVarChar(sql13.MAX), JSON.stringify(fullJson)).input("autor", sql13.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150)).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60)).query(`
           IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
             UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
             SET [Config_Json] = @json, [Actualizado_Por] = @autor, [Usuario_Rol] = @rol, [Fecha_Actualizacion] = GETDATE()
@@ -37284,14 +37302,14 @@ router17.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (r
     await transaction.begin();
     try {
       for (const f of filas) {
-        const idAge = String(f.idAgencia || NAME_TO_CODE3[String(f.agencia || "").toUpperCase()] || "01").padStart(2, "0");
+        const idAge = (resolveAgencyCode(f.idAgencia || f.agencia) || "01").slice(0, 2);
         const opFaltantes = Math.round(Number(f.opFaltantesDia || 0));
         const crecFaltante = Number(f.crecFaltanteDia || 0);
         const sugOp = opFaltantes + 1;
         const sugMonto = crecFaltante + 500;
         const proyOp = f.proyeccionColocacion !== void 0 ? Math.round(Number(f.proyeccionColocacion || 0)) : 0;
         const proyMonto = f.proyeccionMonto !== void 0 ? Number(f.proyeccionMonto || 0) : 0;
-        await new sql13.Request(transaction).input("idAge", sql13.VarChar(2), idAge).input("opFaltantes", sql13.Int, opFaltantes).input("crecFaltante", sql13.Float, crecFaltante).input("sugOp", sql13.Int, sugOp).input("sugMonto", sql13.Float, sugMonto).input("proyOp", sql13.Int, proyOp).input("proyMonto", sql13.Float, proyMonto).input("autor", sql13.VarChar(150), String(usuarioNombre || "Usuario")).query(`
+        await new sql13.Request(transaction).input("idAge", sql13.VarChar(2), idAge).input("opFaltantes", sql13.Int, opFaltantes).input("crecFaltante", sql13.Float, crecFaltante).input("sugOp", sql13.Int, sugOp).input("sugMonto", sql13.Float, sugMonto).input("proyOp", sql13.Int, proyOp).input("proyMonto", sql13.Float, proyMonto).input("autor", sql13.VarChar(150), String(usuarioNombre || "Usuario").slice(0, 150)).query(`
             DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
 
             IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WHERE [Fecha] = @Hoy AND [IdSAgencia] = @idAge)
@@ -37341,9 +37359,9 @@ router17.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req, 
   try {
     await ensureWelcomeTables();
     const { idAsesor, asesorNombre, idAgencia, metaOpDia, metaMontoDia } = req.body;
-    const idAge = String(idAgencia || "01").trim().padStart(2, "0");
-    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim();
-    await pool.request().input("idAsesor", sql13.VarChar(30), codigoAsesor).input("idAge", sql13.VarChar(2), idAge).input("nombre", sql13.VarChar(150), String(asesorNombre || codigoAsesor)).input("op", sql13.Int, Number(metaOpDia || 0)).input("monto", sql13.Float, Number(metaMontoDia || 0)).query(`
+    const idAge = (resolveAgencyCode(idAgencia) || "01").slice(0, 2);
+    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim().slice(0, 30);
+    await pool.request().input("idAsesor", sql13.VarChar(30), codigoAsesor).input("idAge", sql13.VarChar(2), idAge).input("nombre", sql13.VarChar(150), String(asesorNombre || codigoAsesor).slice(0, 150)).input("op", sql13.Int, Number(metaOpDia || 0)).input("monto", sql13.Float, Number(metaMontoDia || 0)).query(`
         DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_asesor] WHERE [Fecha] = @Hoy AND [IdSAsesor] = @idAsesor)
         BEGIN
@@ -37370,7 +37388,8 @@ router17.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
   try {
     await ensureWelcomeTables();
     const { periodo, filas, usuarioNombre, usuarioEmail, usuarioRol } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son obligatorios" });
     }
     await pool.request().query(`
@@ -37380,7 +37399,7 @@ router17.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
     const transaction = new sql13.Transaction(pool);
     await transaction.begin();
     try {
-      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), String(periodo).trim()).query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
+      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), cleanPeriodo).query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
       let totalOpBase = 0;
       let totalOpAjus = 0;
       let totalMontoAjus = 0;
@@ -37393,10 +37412,11 @@ router17.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
         const asesAjus = Number(row.numeroAsesoresAjus ?? asesMeta);
         const crecMeta = Number(row.crecimientoMeta ?? row.crecimientoMetaAjus ?? 0);
         const crecAjus = Number(row.crecimientoMetaAjus ?? crecMeta);
+        const idAgeInt = parseInt(resolveAgencyCode(row.idAgencia || row.agencia) || "1", 10);
         totalOpBase += opMeta;
         totalOpAjus += opAjus;
         totalMontoAjus += montoAjus;
-        await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), String(periodo).trim()).input("idAge", sql13.Int, parseInt(String(row.idAgencia || "1"), 10)).input("opMeta", sql13.Int, opMeta).input("opAjus", sql13.Int, opAjus).input("montoMeta", sql13.Float, montoMeta).input("montoAjus", sql13.Float, montoAjus).input("asesores", sql13.Int, asesMeta).input("asesoresAjus", sql13.Int, asesAjus).input("crecMeta", sql13.Float, crecMeta).input("crecAjus", sql13.Float, crecAjus).query(`
+        await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), cleanPeriodo).input("idAge", sql13.Int, idAgeInt).input("opMeta", sql13.Int, opMeta).input("opAjus", sql13.Int, opAjus).input("montoMeta", sql13.Float, montoMeta).input("montoAjus", sql13.Float, montoAjus).input("asesores", sql13.Int, asesMeta).input("asesoresAjus", sql13.Int, asesAjus).input("crecMeta", sql13.Float, crecMeta).input("crecAjus", sql13.Float, crecAjus).query(`
             INSERT INTO [dm_productividad].[dbo].[FctMensual]
               ([Periodo], [IdSAgencia], [ColocacionNumMeta], [ColocacionNumMetaAjus], [ColocacionMontoMeta], [ColocacionMontoMetaAjus], [NumeroAsesores], [NumeroAsesoresAjus], [CrecimientoMeta], [CrecimientoMetaAjus])
             VALUES
@@ -37405,8 +37425,8 @@ router17.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], asyn
       }
       const diffOp = totalOpAjus - totalOpBase;
       const diffSign = diffOp >= 0 ? `+${diffOp}` : `${diffOp}`;
-      const resumen = `Actualiz\xF3 metas del periodo ${periodo} (${filas.length} agencias \xB7 Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] \xB7 Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
-      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), String(periodo).trim()).input("nombre", sql13.VarChar(150), String(usuarioNombre || "Super Admin")).input("email", sql13.VarChar(150), String(usuarioEmail || "")).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).input("resumen", sql13.NVarChar(sql13.MAX), resumen).query(`
+      const resumen = `Actualiz\xF3 metas del periodo ${cleanPeriodo} (${filas.length} agencias \xB7 Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] \xB7 Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
+      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), cleanPeriodo).input("nombre", sql13.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150)).input("email", sql13.VarChar(150), String(usuarioEmail || "").slice(0, 150)).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60)).input("resumen", sql13.NVarChar(sql13.MAX), resumen).query(`
           INSERT INTO [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]
             ([Periodo], [Usuario_Nombre], [Usuario_Email], [Usuario_Rol], [Resumen_Cambio], [Fecha_Hora])
           VALUES (@periodo, @nombre, @email, @rol, @resumen, GETDATE());
@@ -37429,16 +37449,17 @@ router17.post(["/welcome/administradores", "/api/welcome/administradores"], asyn
   try {
     await ensureWelcomeTables();
     const { periodo, filas } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son requeridos" });
     }
     const transaction = new sql13.Transaction(pool);
     await transaction.begin();
     try {
-      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), String(periodo).trim()).query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
+      await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), cleanPeriodo).query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
       for (const r of filas) {
-        const idAge = String(r.idAgencia || "01").trim().padStart(2, "0");
-        await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), String(periodo).trim()).input("idAge", sql13.Char(2), idAge).input("nombre", sql13.NVarChar(100), String(r.nombre || "").trim()).input("celular", sql13.VarChar(30), String(r.celular || "").trim()).input("correoPers", sql13.VarChar(120), String(r.correoPersonal || "").trim()).input("correoCorp", sql13.VarChar(120), String(r.correoCorporativo || "").trim()).query(`
+        const idAge = (resolveAgencyCode(r.idAgencia || r.agencia) || "01").slice(0, 2);
+        await new sql13.Request(transaction).input("periodo", sql13.VarChar(6), cleanPeriodo).input("idAge", sql13.Char(2), idAge).input("nombre", sql13.NVarChar(100), String(r.nombre || "").trim().slice(0, 100)).input("celular", sql13.VarChar(30), String(r.celular || "").trim().slice(0, 30)).input("correoPers", sql13.VarChar(120), String(r.correoPersonal || "").trim().slice(0, 120)).input("correoCorp", sql13.VarChar(120), String(r.correoCorporativo || "").trim().slice(0, 120)).query(`
             INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
               ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
             VALUES (@periodo, @idAge, @nombre, @celular, @correoPers, @correoCorp);
@@ -37466,11 +37487,11 @@ router17.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], asyn
     if (!pagare) {
       return res.status(400).json({ error: "El pagar\xE9 es obligatorio" });
     }
-    const pagareClean = String(pagare).trim();
-    const compText = String(compromiso || "").trim();
+    const pagareClean = String(pagare).trim().slice(0, 40);
+    const compText = String(compromiso || "").trim().slice(0, 500);
     const fechaProm = fechaPromesa && String(fechaPromesa).trim() !== "" ? String(fechaPromesa).trim() : null;
-    const autor = String(usuarioNombre || "Usuario").trim();
-    const rol = String(usuarioRol || "ANALISTA").trim();
+    const autor = String(usuarioNombre || "Usuario").trim().slice(0, 150);
+    const rol = String(usuarioRol || "ANALISTA").trim().slice(0, 60);
     await pool.request().input("pagare", sql13.VarChar(40), pagareClean).input("compromiso", sql13.NVarChar(500), compText).input("fechaPromesa", sql13.Date, fechaProm).input("autor", sql13.VarChar(150), autor).input("rol", sql13.VarChar(60), rol).query(`
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[fct_compromisos_mora_web] WHERE [Pagare] = @pagare)
         BEGIN
@@ -37624,7 +37645,7 @@ router17.post(["/welcome/config-sistema", "/api/welcome/config-sistema"], async 
       return res.status(400).json({ error: "El objeto config es requerido" });
     }
     const jsonStr = JSON.stringify(config2);
-    await pool.request().input("json", sql13.NVarChar(sql13.MAX), jsonStr).input("autor", sql13.VarChar(150), String(usuarioNombre || "Super Admin")).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN")).query(`
+    await pool.request().input("json", sql13.NVarChar(sql13.MAX), jsonStr).input("autor", sql13.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150)).input("rol", sql13.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60)).query(`
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
           UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
           SET [Config_Json] = @json,
@@ -38669,7 +38690,7 @@ router19.post(
           (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
       res.json({ ok: true });
     } catch (error2) {
@@ -38690,7 +38711,7 @@ router19.delete(
         WHERE [Id] = @id;
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
       res.json({ ok: true });
     } catch (error2) {
@@ -39426,36 +39447,84 @@ router21.get(
 );
 var plazoFijo_default = router21;
 
-// src/routes/index.ts
+// src/routes/reporteConsolidado.ts
+var import_express22 = __toESM(require_express2(), 1);
 var router22 = (0, import_express22.Router)();
-router22.use(health_default);
-router22.use(preventiva_default);
-router22.use(filtros_default);
-router22.use(calendario_default);
-router22.use(gerencia_default);
-router22.use(supervision_default);
-router22.use(agencia_default);
-router22.use(traspasosRecuperacion_default);
-router22.use(asesores_default);
-router22.use(diaria_default);
-router22.use(evolucion_default);
-router22.use(cancelados_default);
-router22.use(avance_default);
-router22.use(ranking_default);
-router22.use(mora_default);
-router22.use(pagosMora_default);
-router22.use(welcome_default);
-router22.use(productividadViva_default);
-router22.use(balanceGerencial_default);
-router22.use(moraProducto_default);
-router22.use(plazoFijo_default);
-var routes_default = router22;
+router22.post(
+  ["/reporte-consolidado", "/api/reporte-consolidado"],
+  async (req, res) => {
+    try {
+      const baseUrl = (process.env.GEODILE_API_BASE_URL || "http://192.168.3.34:8080").replace(/\/$/, "");
+      const token = process.env.GEODILE_API_TOKEN || "";
+      const { fecha_ini, fecha_fin, periodo } = req.body || {};
+      const upstream = await fetch(
+        `${baseUrl}/api_app_dile_v1_1/api/generarReporteConsolidado`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...token ? { Authorization: token } : {}
+          },
+          body: JSON.stringify({ fecha_ini, fecha_fin, periodo })
+        }
+      );
+      const text = await upstream.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = {
+          status: false,
+          count: 0,
+          message: text || "Respuesta inv\xE1lida del servidor origen",
+          data: []
+        };
+      }
+      return res.status(upstream.status).json(data);
+    } catch (error2) {
+      console.error("Error en proxy /api/reporte-consolidado:", error2);
+      return res.status(502).json({
+        status: false,
+        count: 0,
+        message: error2?.message || "No se pudo conectar con el servidor de Reporte Consolidado (192.168.3.34:8080)",
+        data: []
+      });
+    }
+  }
+);
+var reporteConsolidado_default = router22;
+
+// src/routes/index.ts
+var router23 = (0, import_express23.Router)();
+router23.use(health_default);
+router23.use(preventiva_default);
+router23.use(filtros_default);
+router23.use(calendario_default);
+router23.use(gerencia_default);
+router23.use(supervision_default);
+router23.use(agencia_default);
+router23.use(traspasosRecuperacion_default);
+router23.use(asesores_default);
+router23.use(diaria_default);
+router23.use(evolucion_default);
+router23.use(cancelados_default);
+router23.use(avance_default);
+router23.use(ranking_default);
+router23.use(mora_default);
+router23.use(pagosMora_default);
+router23.use(welcome_default);
+router23.use(productividadViva_default);
+router23.use(balanceGerencial_default);
+router23.use(moraProducto_default);
+router23.use(plazoFijo_default);
+router23.use(reporteConsolidado_default);
+var routes_default = router23;
 
 // src/app.ts
-var app = (0, import_express23.default)();
+var app = (0, import_express24.default)();
 app.set("etag", false);
 app.use((0, import_cors.default)());
-app.use(import_express23.default.json());
+app.use(import_express24.default.json());
 app.use(smartCacheMiddleware);
 startCacheWatcher();
 app.get("/health", (req, res) => {

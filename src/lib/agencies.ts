@@ -17,19 +17,38 @@ export const AGENCY_NAMES: Record<string, string> = {
   "98": "Agencia Digital (98)",
 };
 
+const normalizeText = (val: string) =>
+  val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
 export const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([code, name]) => [name.toLowerCase(), code])
+  Object.entries(AGENCY_NAMES).map(([code, name]) => [normalizeText(name), code])
 );
 
 export function getAgencyName(code: any, fallbackPrefix = "Otra Agencia"): string {
-  const clean = String(code || "").trim().padStart(2, "0");
+  const clean = resolveAgencyCode(code);
   return AGENCY_NAMES[clean] || `${fallbackPrefix}`;
 }
 
 export function resolveAgencyCode(agenciaParam: any): string {
-  const raw = String(agenciaParam || "").trim();
-  if (!raw || raw === "Todas" || raw === "Todas las Agencias") return "";
-  return NAME_TO_CODE[raw.toLowerCase()] || raw.padStart(2, "0");
+  const raw = String(agenciaParam ?? "").split(",")[0].trim();
+  const norm = normalizeText(raw);
+  if (
+    !raw ||
+    ["todas", "todas las agencias", "null", "undefined", "all"].includes(norm)
+  ) {
+    return "";
+  }
+  if (NAME_TO_CODE[norm]) return NAME_TO_CODE[norm];
+  if (norm === "oficina principal" || norm === "principal") return "01";
+
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  const code = digits.padStart(2, "0").slice(-2);
+  return AGENCY_NAMES[code] ? code : "";
 }
 
 export function sqlCaseAgencia(colExpr: string): string {

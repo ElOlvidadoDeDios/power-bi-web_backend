@@ -88,19 +88,38 @@ export const AGENCY_NAMES: Record<string, string> = {
   "98": "Agencia Digital (98)",
 };
 
+const normalizeText = (val: string) =>
+  val
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
 export const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([code, name]) => [name.toLowerCase(), code])
+  Object.entries(AGENCY_NAMES).map(([code, name]) => [normalizeText(name), code])
 );
 
 export function getAgencyName(code: any, fallbackPrefix = "Otra Agencia"): string {
-  const clean = String(code || "").trim().padStart(2, "0");
+  const clean = resolveAgencyCode(code);
   return AGENCY_NAMES[clean] || `${fallbackPrefix}`;
 }
 
 export function resolveAgencyCode(agenciaParam: any): string {
-  const raw = String(agenciaParam || "").trim();
-  if (!raw || raw === "Todas" || raw === "Todas las Agencias") return "";
-  return NAME_TO_CODE[raw.toLowerCase()] || raw.padStart(2, "0");
+  const raw = String(agenciaParam ?? "").split(",")[0].trim();
+  const norm = normalizeText(raw);
+  if (
+    !raw ||
+    ["todas", "todas las agencias", "null", "undefined", "all"].includes(norm)
+  ) {
+    return "";
+  }
+  if (NAME_TO_CODE[norm]) return NAME_TO_CODE[norm];
+  if (norm === "oficina principal" || norm === "principal") return "01";
+
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  const code = digits.padStart(2, "0").slice(-2);
+  return AGENCY_NAMES[code] ? code : "";
 }
 
 export function sqlCaseAgencia(colExpr: string): string {
@@ -328,6 +347,9 @@ export function invalidateCacheBucket(bucketName?: BucketName) {
 }
 
 async function syncVersionsFromDatabase(): Promise<boolean> {
+  if (isChecking) return false;
+  isChecking = true;
+
   try {
     const result = await pool.request().query(`
       SELECT
@@ -361,11 +383,9 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
           `🔄 [SmartCache:${key.toUpperCase()} | Id=${bucket.idLog}] Cambio detectado (${bucket.lastFormattedDate}). Refrescando solo sus tablas...`
         );
         await refreshBucketRoutes(bucket, latestVer);
-        // Si cambia mora (Id=4), limpiamos también las rutas de welcome en etl para que vean la mora fresca al instante
         if (key === "mora") {
           buckets.etl.store.clear();
         }
-        // ✅ Si cambian las Metas Diarias (Id=1 / etl), limpiamos también el caché de Productividad en Vivo
         if (key === "etl") {
           buckets.vivo.store.clear();
         }
@@ -377,14 +397,23 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
   } catch (err) {
     console.error("⚠️ [SmartCache] Error leyendo versiones SQL:", err);
     return false;
+  } finally {
+    isChecking = false;
   }
 }
 
 async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
-  const routesToWarm = Array.from(bucket.knownRoutes);
   bucket.store.clear();
   bucket.version = newVersion;
 
+  // Para gerencial (avance/cancelados paginados con múltiples filtros) solo limpiamos RAM
+  // y se recarga bajo demanda al primer clic para evitar 50-90s de prewarm en cada ciclo.
+  if (bucket.name === "gerencial") {
+    console.log(`✅ [SmartCache:GERENCIAL] Caché invalidado en RAM (recarga bajo demanda).`);
+    return;
+  }
+
+  const routesToWarm = Array.from(bucket.knownRoutes);
   if (routesToWarm.length === 0) return;
 
   const start = Date.now();
@@ -404,14 +433,8 @@ async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
 }
 
 export function startCacheWatcher() {
-  const checkLoop = async () => {
-    if (isChecking) return;
-    isChecking = true;
-    try {
-      await syncVersionsFromDatabase();
-    } finally {
-      isChecking = false;
-    }
+  const checkLoop = () => {
+    syncVersionsFromDatabase().catch(() => {});
   };
 
   setTimeout(checkLoop, 1000);
@@ -521,6 +544,7 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
       if (
+        activeBucket.name !== "gerencial" &&
         activeBucket.knownRoutes.size < 25 &&
         req.originalUrl &&
         (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))
@@ -893,8 +917,8 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
   const agencia =
     agenciaParam === "Todas" || agenciaParam === "Todas las Agencias"
       ? ""
-      : agenciaParam.trim();
-  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
+      : agenciaParam.trim().slice(0, 50);
+  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim().slice(0, 100);
 
   try {
     await ensureAvanceCols();
@@ -912,6 +936,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           CAST(ROUND(AVG(CAST(ISNULL([Dias_Atraso], 0) AS FLOAT)), 1) AS DECIMAL(10, 1)) AS Prom_Riesgo,
           MAX(ISNULL([Dias_Atraso], 0)) AS Max_Riesgo
         FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        WHERE [Fecha_Foto] >= DATEADD(day, -30, CAST(GETDATE() AS DATE))
         GROUP BY LTRIM(RTRIM([Pagare]))
       ),
       BaseAvance AS (
@@ -2111,7 +2136,7 @@ router.post(
           (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
 
       res.json({ ok: true });
@@ -2137,7 +2162,7 @@ router.delete(
         WHERE [Id] = @id;
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
       res.json({ ok: true });
     } catch (error) {
@@ -2299,136 +2324,158 @@ import { resolveAgencyCode } from "../lib/agencies";
 
 const router = Router();
 
-router.get(["/productividad-diaria", "/api/productividad-diaria"], async (req: Request, res: Response) => {
-  const periodo = (req.query.periodo as string) || "";
-  const agencia = (req.query.agencia as string) || "Todas";
-  const asesor = (req.query.asesor as string) || "Todos";
-  const fecha = (req.query.fecha as string) || "Hoy";
+router.get(
+  [
+    "/diaria/:periodo",
+    "/diaria",
+    "/productividad-diaria",
+    "/api/diaria/:periodo",
+    "/api/diaria",
+    "/api/productividad-diaria",
+  ],
+  async (req: Request, res: Response) => {
+    const rawPeriodo = String(req.params.periodo || req.query.periodo || "");
+    const periodo = rawPeriodo.replace(/[^0-9]/g, "").slice(0, 6);
 
-  const idAgencia = resolveAgencyCode(agencia);
+    const agencia = String(req.query.agencia || "Todas").trim();
+    const asesor = String(req.query.asesor || "Todos").trim();
+    const fecha = String(req.query.day || req.query.fecha || "Hoy").trim();
 
-  try {
-    const request = pool.request();
-    request.input("periodo", sql.VarChar(6), periodo);
-    request.input("idAgencia", sql.VarChar(2), idAgencia);
-    request.input("asesor", sql.VarChar(150), asesor);
-    request.input("fechaParam", sql.VarChar(20), fecha);
+    const firstAge = agencia.split(",")[0].trim();
+    const resolvedAge = resolveAgencyCode(firstAge);
+    const idAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
 
-    const querySQL = `
-      DECLARE @FechaObjetivo DATE;
+    try {
+      const request = pool.request();
+      request.input("periodo", sql.VarChar(6), periodo);
+      request.input("idAgencia", sql.VarChar(10), idAgencia);
+      request.input("asesor", sql.VarChar(150), asesor);
+      request.input("fechaParam", sql.VarChar(20), fecha);
 
-      IF @fechaParam = 'Hoy'
-          SET @FechaObjetivo = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
-      ELSE IF @fechaParam = 'Ayer'
-          SET @FechaObjetivo = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
-      ELSE
-          SET @FechaObjetivo = TRY_CAST(@fechaParam AS DATE);
+      const querySQL = `
+        DECLARE @PeriodoEfectivo VARCHAR(6) = @periodo;
+        IF @PeriodoEfectivo = ''
+            SET @PeriodoEfectivo = CONVERT(VARCHAR(6), DATEADD(hour, -5, GETUTCDATE()), 112);
 
-      IF @FechaObjetivo IS NULL
-          SET @FechaObjetivo = (
-              SELECT MAX(CAST(Fecha AS DATE)) 
-              FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
-              WHERE Periodo = @periodo
-          );
+        DECLARE @FechaObjetivo DATE;
 
-      WITH Agencias AS (
-          SELECT * FROM (VALUES 
-              ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
-              ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
-              ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
-              ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
-              ('13', 'Pucallpa')
-          ) AS t(IdSAgencia, NombreAgencia)
-      ),
-      MetasDiarias AS (
-          SELECT 
-              RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
-              ISNULL(SUM(Op_Faltantes_Dia), 0) AS metaOp,
-              ISNULL(SUM(Proy_Op_Admin), 0) AS proyOp,
-              ISNULL(SUM(Crec_Faltante_Dia), 0) AS metaMonto,
-              ISNULL(SUM(Proy_Monto_Admin), 0) AS proyMonto
-          FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
-          WHERE Fecha = @FechaObjetivo
-          GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
-      ),
-      AsesoresFiltrados AS (
-          SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
-          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE Periodo = @periodo 
-            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
-      ),
-      RealDiario AS (
-          SELECT 
-              RTRIM(LTRIM(F.IdSAgencia)) AS IdSAgencia,
-              ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
-              ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
-          FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
-          INNER JOIN AsesoresFiltrados A ON RTRIM(LTRIM(F.IdSAsesor)) = A.IdSAsesor
-          WHERE F.Periodo = @periodo
+        IF @fechaParam = 'Hoy'
+            SET @FechaObjetivo = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
+        ELSE IF @fechaParam = 'Ayer'
+            SET @FechaObjetivo = CAST(DATEADD(day, -1, DATEADD(hour, -5, GETUTCDATE())) AS DATE);
+        ELSE
+            SET @FechaObjetivo = COALESCE(
+                TRY_CONVERT(DATE, @fechaParam, 23),
+                TRY_CONVERT(DATE, @fechaParam, 103),
+                TRY_CAST(@fechaParam AS DATE)
+            );
+
+        IF @FechaObjetivo IS NULL
+            SET @FechaObjetivo = (
+                SELECT MAX(CAST(Fecha AS DATE)) 
+                FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] WITH (NOLOCK)
+                WHERE Periodo = @PeriodoEfectivo
+            );
+
+        WITH Agencias AS (
+            SELECT * FROM (VALUES 
+                ('01', 'Wanchaq'), ('02', 'San Jerónimo'), ('03', 'Quillabamba'),
+                ('04', 'Sicuani'), ('05', 'Molino'), ('06', 'Juliaca'),
+                ('07', 'Lima Los Olivos'), ('08', 'Tica Tica'), ('09', 'Magisterio'),
+                ('10', 'Lima SJL'), ('11', 'Chiclayo'), ('12', 'Arequipa'),
+                ('13', 'Pucallpa')
+            ) AS t(IdSAgencia, NombreAgencia)
+        ),
+        MetasDiarias AS (
+            SELECT 
+                RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2) AS IdSAgencia,
+                ISNULL(SUM(Op_Faltantes_Dia), 0) AS metaOp,
+                ISNULL(SUM(Proy_Op_Admin), 0) AS proyOp,
+                ISNULL(SUM(Crec_Faltante_Dia), 0) AS metaMonto,
+                ISNULL(SUM(Proy_Monto_Admin), 0) AS proyMonto
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_metas_diarias_control] WITH (NOLOCK)
+            WHERE Fecha = @FechaObjetivo
+            GROUP BY RIGHT('00' + RTRIM(LTRIM(IdSAgencia)), 2)
+        ),
+        AsesoresFiltrados AS (
+            SELECT DISTINCT RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+            WHERE Periodo = @PeriodoEfectivo 
+              AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+              AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+        ),
+        RealDiario AS (
+            SELECT 
+                RTRIM(LTRIM(F.IdSAgencia)) AS IdSAgencia,
+                ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
+                ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
+            FROM [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+            INNER JOIN AsesoresFiltrados A ON RTRIM(LTRIM(F.IdSAsesor)) = A.IdSAsesor
+            WHERE F.Periodo = @PeriodoEfectivo
+              AND CAST(F.Fecha AS DATE) = @FechaObjetivo
+            GROUP BY RTRIM(LTRIM(F.IdSAgencia))
+        )
+        SELECT 
+            A.IdSAgencia AS idAgencia,
+            A.NombreAgencia AS agencia,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaOp, 0) ELSE 0 END AS metaOp,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyOp, 0) ELSE 0 END AS proyOp,
+            ISNULL(R.realOp, 0) AS realOp,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaMonto, 0) ELSE 0 END AS metaMonto,
+            CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyMonto, 0) ELSE 0 END AS proyMonto,
+            ISNULL(R.realMonto, 0) AS realMonto
+        FROM Agencias A
+        LEFT JOIN MetasDiarias M ON A.IdSAgencia = M.IdSAgencia
+        LEFT JOIN RealDiario R ON A.IdSAgencia = R.IdSAgencia
+        WHERE (@idAgencia = '' OR A.IdSAgencia = @idAgencia)
+        ORDER BY A.IdSAgencia ASC;
+
+        WITH AsesoresDetalle AS (
+            SELECT 
+                RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
+                MAX(Asesor) AS nombreAsesor,
+                MAX(RTRIM(LTRIM(IdSAgencia))) AS IdSAgencia
+            FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
+            WHERE Periodo = @PeriodoEfectivo 
+              AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
+              AND (@idAgencia = '' OR RTRIM(LTRIM(IdSAgencia)) = @idAgencia)
+              AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
+            GROUP BY RTRIM(LTRIM(IdSAsesor))
+        )
+        SELECT 
+            A.nombreAsesor AS asesor,
+            CASE A.IdSAgencia
+                WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba'
+                WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
+                WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
+                WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
+                WHEN '13' THEN 'Pucallpa' ELSE 'Otra'
+            END AS agencia,
+            ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
+            ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
+        FROM AsesoresDetalle A
+        LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
+            ON A.IdSAsesor = RTRIM(LTRIM(F.IdSAsesor)) 
+            AND F.Periodo = @PeriodoEfectivo 
             AND CAST(F.Fecha AS DATE) = @FechaObjetivo
-          GROUP BY RTRIM(LTRIM(F.IdSAgencia))
-      )
-      SELECT 
-          A.IdSAgencia AS idAgencia,
-          A.NombreAgencia AS agencia,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaOp, 0) ELSE 0 END AS metaOp,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyOp, 0) ELSE 0 END AS proyOp,
-          ISNULL(R.realOp, 0) AS realOp,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.metaMonto, 0) ELSE 0 END AS metaMonto,
-          CASE WHEN @asesor = 'Todos' THEN ISNULL(M.proyMonto, 0) ELSE 0 END AS proyMonto,
-          ISNULL(R.realMonto, 0) AS realMonto
-      FROM Agencias A
-      LEFT JOIN MetasDiarias M ON A.IdSAgencia = M.IdSAgencia
-      LEFT JOIN RealDiario R ON A.IdSAgencia = R.IdSAgencia
-      WHERE (@idAgencia = '' OR A.IdSAgencia = @idAgencia)
-      ORDER BY A.IdSAgencia ASC;
+        GROUP BY A.IdSAsesor, A.nombreAsesor, A.IdSAgencia
+        HAVING ISNULL(SUM(F.ColocacionNumReal), 0) > 0 OR @asesor <> 'Todos'
+        ORDER BY realMonto DESC, realOp DESC;
+      `;
 
-      WITH AsesoresDetalle AS (
-          SELECT 
-              RTRIM(LTRIM(IdSAsesor)) AS IdSAsesor, 
-              MAX(Asesor) AS nombreAsesor,
-              MAX(RTRIM(LTRIM(IdSAgencia))) AS IdSAgencia
-          FROM [DWH_Gestion_Cartera].[dbo].[dim_asesor] WITH (NOLOCK)
-          WHERE Periodo = @periodo 
-            AND (Cargo <> 'RECUPERADOR' OR Cargo IS NULL)
-            AND (@idAgencia = '' OR RTRIM(LTRIM(IdSAgencia)) = @idAgencia)
-            AND (@asesor = 'Todos' OR RTRIM(LTRIM(AsesorNombresApellidos)) = @asesor OR RTRIM(LTRIM(Asesor)) = @asesor)
-          GROUP BY RTRIM(LTRIM(IdSAsesor))
-      )
-      SELECT 
-          A.nombreAsesor AS asesor,
-          CASE A.IdSAgencia
-              WHEN '01' THEN 'Wanchaq' WHEN '02' THEN 'San Jerónimo' WHEN '03' THEN 'Quillabamba'
-              WHEN '04' THEN 'Sicuani' WHEN '05' THEN 'Molino' WHEN '06' THEN 'Juliaca'
-              WHEN '07' THEN 'Lima Los Olivos' WHEN '08' THEN 'Tica Tica' WHEN '09' THEN 'Magisterio'
-              WHEN '10' THEN 'Lima SJL' WHEN '11' THEN 'Chiclayo' WHEN '12' THEN 'Arequipa'
-              WHEN '13' THEN 'Pucallpa' ELSE 'Otra'
-          END AS agencia,
-          ISNULL(SUM(F.ColocacionNumReal), 0) AS realOp,
-          ISNULL(SUM(F.ColocacionMontoReal), 0) AS realMonto
-      FROM AsesoresDetalle A
-      LEFT JOIN [DWH_Gestion_Cartera].[dbo].[fct_flow] F WITH (NOLOCK)
-          ON A.IdSAsesor = RTRIM(LTRIM(F.IdSAsesor)) 
-          AND F.Periodo = @periodo 
-          AND CAST(F.Fecha AS DATE) = @FechaObjetivo
-      GROUP BY A.IdSAsesor, A.nombreAsesor, A.IdSAgencia
-      HAVING ISNULL(SUM(F.ColocacionNumReal), 0) > 0 OR @asesor <> 'Todos'
-      ORDER BY realMonto DESC, realOp DESC;
-    `;
+      const result = await request.query(querySQL);
+      const sets = result.recordsets as any[];
 
-    const result = await request.query(querySQL);
-    const sets = result.recordsets as any[];
-
-    res.json({
-      agencias: sets[0] || [],
-      asesores: sets[1] || [],
-    });
-  } catch (error) {
-    console.error("Error obteniendo Productividad Diaria:", error);
-    res.status(500).json({ error: "Error calculando productividad diaria" });
+      res.json({
+        agencias: sets[0] || [],
+        asesores: sets[1] || [],
+      });
+    } catch (error) {
+      console.error("Error obteniendo Productividad Diaria:", error);
+      res.status(500).json({ error: "Error calculando productividad diaria" });
+    }
   }
-});
+);
 
 export default router; 
 === D:\Proyectos\power-bi-web_backend\src\routes\evolucion.ts === 
@@ -4751,13 +4798,9 @@ import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
 import { getCombinedVersionSignature } from "../middlewares/smartCache";
-import { AGENCY_NAMES, sqlCaseAgencia } from "../lib/agencies";
+import { AGENCY_NAMES, sqlCaseAgencia, resolveAgencyCode } from "../lib/agencies";
 
 const router = Router();
-
-const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([k, v]) => [v.toUpperCase(), k])
-);
 
 let tablesEnsured = false;
 
@@ -4878,7 +4921,7 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
 
     const periodoReq = (req.query.periodo as string) || "";
     const agenciaCodeReq = (req.query.id_age as string) || "";
-    const asesorReq = ((req.query.asesor as string) || "").trim();
+    const asesorReq = ((req.query.asesor as string) || "").trim().slice(0, 150);
 
     const [periodosRes, autoCalcFaltantesDiarios] = await Promise.all([
       pool.request().query(`
@@ -4891,11 +4934,27 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
     ]);
 
     const periodosDisponibles = periodosRes.recordset.map((p: any) => p.Periodo);
+
+    const cleanPeriodoReq = String(periodoReq || "").replace(/[^0-9]/g, "").slice(0, 6);
     const periodo =
-      periodoReq ||
+      cleanPeriodoReq ||
       periodosDisponibles[0] ||
       new Date().toISOString().slice(0, 7).replace("-", "");
-    const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
+
+    const resolvedAge = resolveAgencyCode(agenciaCodeReq);
+    const idAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
+
+    if (
+      agenciaCodeReq &&
+      agenciaCodeReq.trim().length > 2 &&
+      !["todas", "todas las agencias", "null", "undefined"].includes(
+        agenciaCodeReq.trim().toLowerCase()
+      )
+    ) {
+      console.warn(
+        `⚠️ [/welcome/init] id_age recibido con >2 chars: "${agenciaCodeReq}" -> normalizado a "${idAgencia}"`
+      );
+    }
 
     await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
       IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
@@ -5236,10 +5295,8 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
             B.NombreAgencia AS agencia,
             B.opFaltantesFinal AS opFaltantesDia,
             B.crecFaltanteFinal AS crecFaltanteDia,
-            -- ✅ Regla de sugerencia para los Administradores de Agencia: Faltante + 1 en Op y Faltante + 500 en Monto
             (B.opFaltantesFinal + 1) AS sugerenciaOpGerencia,
             (B.crecFaltanteFinal + 500) AS sugerenciaMontoGerencia,
-            -- ✅ Proyecciones ingresadas (0 si aún está pendiente)
             B.proyOpConfirmada AS proyeccionColocacion,
             B.proyMontoConfirmada AS proyeccionMonto,
             ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
@@ -5450,7 +5507,7 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
         ORDER BY [UltimaActualizacion] DESC
       `),
 
-      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día  👈 2. AGREGAR AQUÍ
+      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día
       pool
         .request()
         .query(`
@@ -5518,8 +5575,8 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
       await pool
         .request()
         .input("json", sql.NVarChar(sql.MAX), JSON.stringify(fullJson))
-        .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+        .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
         .query(`
           IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
             UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
@@ -5540,7 +5597,7 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
 
     try {
       for (const f of filas) {
-        const idAge = String(f.idAgencia || NAME_TO_CODE[String(f.agencia || "").toUpperCase()] || "01").padStart(2, "0");
+        const idAge = (resolveAgencyCode(f.idAgencia || f.agencia) || "01").slice(0, 2);
         const opFaltantes = Math.round(Number(f.opFaltantesDia || 0));
         const crecFaltante = Number(f.crecFaltanteDia || 0);
         const sugOp = opFaltantes + 1;
@@ -5556,7 +5613,7 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
           .input("sugMonto", sql.Float, sugMonto)
           .input("proyOp", sql.Int, proyOp)
           .input("proyMonto", sql.Float, proyMonto)
-          .input("autor", sql.VarChar(150), String(usuarioNombre || "Usuario"))
+          .input("autor", sql.VarChar(150), String(usuarioNombre || "Usuario").slice(0, 150))
           .query(`
             DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
 
@@ -5610,13 +5667,13 @@ router.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req: Re
   try {
     await ensureWelcomeTables();
     const { idAsesor, asesorNombre, idAgencia, metaOpDia, metaMontoDia } = req.body;
-    const idAge = String(idAgencia || "01").trim().padStart(2, "0");
-    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim();
+    const idAge = (resolveAgencyCode(idAgencia) || "01").slice(0, 2);
+    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim().slice(0, 30);
 
     await pool.request()
       .input("idAsesor", sql.VarChar(30), codigoAsesor)
       .input("idAge", sql.VarChar(2), idAge)
-      .input("nombre", sql.VarChar(150), String(asesorNombre || codigoAsesor))
+      .input("nombre", sql.VarChar(150), String(asesorNombre || codigoAsesor).slice(0, 150))
       .input("op", sql.Int, Number(metaOpDia || 0))
       .input("monto", sql.Float, Number(metaMontoDia || 0))
       .query(`
@@ -5648,7 +5705,8 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
   try {
     await ensureWelcomeTables();
     const { periodo, filas, usuarioNombre, usuarioEmail, usuarioRol } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son obligatorios" });
     }
 
@@ -5662,7 +5720,7 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
 
     try {
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
         .query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
 
       let totalOpBase = 0;
@@ -5678,14 +5736,15 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
         const asesAjus = Number(row.numeroAsesoresAjus ?? asesMeta);
         const crecMeta = Number(row.crecimientoMeta ?? row.crecimientoMetaAjus ?? 0);
         const crecAjus = Number(row.crecimientoMetaAjus ?? crecMeta);
+        const idAgeInt = parseInt(resolveAgencyCode(row.idAgencia || row.agencia) || "1", 10);
 
         totalOpBase += opMeta;
         totalOpAjus += opAjus;
         totalMontoAjus += montoAjus;
 
         await new sql.Request(transaction)
-          .input("periodo", sql.VarChar(6), String(periodo).trim())
-          .input("idAge", sql.Int, parseInt(String(row.idAgencia || "1"), 10))
+          .input("periodo", sql.VarChar(6), cleanPeriodo)
+          .input("idAge", sql.Int, idAgeInt)
           .input("opMeta", sql.Int, opMeta)
           .input("opAjus", sql.Int, opAjus)
           .input("montoMeta", sql.Float, montoMeta)
@@ -5704,13 +5763,13 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
 
       const diffOp = totalOpAjus - totalOpBase;
       const diffSign = diffOp >= 0 ? `+${diffOp}` : `${diffOp}`;
-      const resumen = `Actualizó metas del periodo ${periodo} (${filas.length} agencias · Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] · Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
+      const resumen = `Actualizó metas del periodo ${cleanPeriodo} (${filas.length} agencias · Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] · Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
 
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
-        .input("nombre", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-        .input("email", sql.VarChar(150), String(usuarioEmail || ""))
-        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
+        .input("nombre", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+        .input("email", sql.VarChar(150), String(usuarioEmail || "").slice(0, 150))
+        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
         .input("resumen", sql.NVarChar(sql.MAX), resumen)
         .query(`
           INSERT INTO [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]
@@ -5737,7 +5796,8 @@ router.post(["/welcome/administradores", "/api/welcome/administradores"], async 
   try {
     await ensureWelcomeTables();
     const { periodo, filas } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son requeridos" });
     }
 
@@ -5746,18 +5806,18 @@ router.post(["/welcome/administradores", "/api/welcome/administradores"], async 
 
     try {
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
         .query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
 
       for (const r of filas) {
-        const idAge = String(r.idAgencia || "01").trim().padStart(2, "0");
+        const idAge = (resolveAgencyCode(r.idAgencia || r.agencia) || "01").slice(0, 2);
         await new sql.Request(transaction)
-          .input("periodo", sql.VarChar(6), String(periodo).trim())
+          .input("periodo", sql.VarChar(6), cleanPeriodo)
           .input("idAge", sql.Char(2), idAge)
-          .input("nombre", sql.NVarChar(100), String(r.nombre || "").trim())
-          .input("celular", sql.VarChar(30), String(r.celular || "").trim())
-          .input("correoPers", sql.VarChar(120), String(r.correoPersonal || "").trim())
-          .input("correoCorp", sql.VarChar(120), String(r.correoCorporativo || "").trim())
+          .input("nombre", sql.NVarChar(100), String(r.nombre || "").trim().slice(0, 100))
+          .input("celular", sql.VarChar(30), String(r.celular || "").trim().slice(0, 30))
+          .input("correoPers", sql.VarChar(120), String(r.correoPersonal || "").trim().slice(0, 120))
+          .input("correoCorp", sql.VarChar(120), String(r.correoCorporativo || "").trim().slice(0, 120))
           .query(`
             INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
               ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
@@ -5790,11 +5850,11 @@ router.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], async 
       return res.status(400).json({ error: "El pagaré es obligatorio" });
     }
 
-    const pagareClean = String(pagare).trim();
-    const compText = String(compromiso || "").trim();
+    const pagareClean = String(pagare).trim().slice(0, 40);
+    const compText = String(compromiso || "").trim().slice(0, 500);
     const fechaProm = fechaPromesa && String(fechaPromesa).trim() !== "" ? String(fechaPromesa).trim() : null;
-    const autor = String(usuarioNombre || "Usuario").trim();
-    const rol = String(usuarioRol || "ANALISTA").trim();
+    const autor = String(usuarioNombre || "Usuario").trim().slice(0, 150);
+    const rol = String(usuarioRol || "ANALISTA").trim().slice(0, 60);
 
     await pool.request()
       .input("pagare", sql.VarChar(40), pagareClean)
@@ -5964,8 +6024,8 @@ router.post(["/welcome/config-sistema", "/api/welcome/config-sistema"], async (r
     const jsonStr = JSON.stringify(config);
     await pool.request()
       .input("json", sql.NVarChar(sql.MAX), jsonStr)
-      .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-      .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+      .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+      .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
       .query(`
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
           UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]

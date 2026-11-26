@@ -2,29 +2,9 @@
 import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
+import { AGENCY_NAMES, resolveAgencyCode } from "../lib/agencies";
 
 const router = Router();
-
-const AGENCY_NAMES: Record<string, string> = {
-  "01": "Wanchaq",
-  "02": "San Jerónimo",
-  "03": "Quillabamba",
-  "04": "Sicuani",
-  "05": "Molino",
-  "06": "Juliaca",
-  "07": "Lima Los Olivos",
-  "08": "Tica Tica",
-  "09": "Magisterio",
-  "10": "Lima SJL",
-  "11": "Chiclayo",
-  "12": "Arequipa",
-  "13": "Pucallpa",
-  "98": "Agencia Digital (98)",
-};
-
-const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([code, name]) => [name.toLowerCase(), code])
-);
 
 let tableEnsured = false;
 async function ensureTraspasosTable() {
@@ -73,39 +53,33 @@ router.get(
 
       const d = new Date();
       const defaultPer = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const periodo = String(req.query.periodo || defaultPer).trim();
+      const periodo = String(req.query.periodo || defaultPer)
+        .replace(/[^0-9]/g, "")
+        .slice(0, 6) || defaultPer;
       const agenciaParam = String(req.query.agencia || "Todas").trim();
       const asesorOrigenParam = String(req.query.asesorOrigen || "Todos").trim();
       const recuperadorParam = String(req.query.recuperador || "Todos").trim();
-      const searchParam = String(req.query.search || "").trim();
+      const searchParam = String(req.query.search || "").trim().slice(0, 150);
 
       const page = Math.max(parseInt(req.query.page as string, 10) || 1, 1);
       const limit = Math.max(parseInt(req.query.limit as string, 10) || 100, 1);
       const offset = (page - 1) * limit;
 
-      let codAgencia = "";
-      if (
-        agenciaParam !== "Todas" &&
-        agenciaParam !== "Todas las Agencias" &&
-        agenciaParam !== ""
-      ) {
-        codAgencia =
-          NAME_TO_CODE[agenciaParam.toLowerCase()] ||
-          agenciaParam.padStart(2, "0");
-      }
+      const resolvedAge = resolveAgencyCode(agenciaParam);
+      const codAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
 
       const asesorOrigen =
         asesorOrigenParam === "Todos" || asesorOrigenParam === "Todas"
           ? ""
-          : asesorOrigenParam;
+          : asesorOrigenParam.slice(0, 150);
       const recuperador =
         recuperadorParam === "Todos" || recuperadorParam === "Todas"
           ? ""
-          : recuperadorParam;
+          : recuperadorParam.slice(0, 150);
 
       const request = pool.request();
       request.input("periodo", sql.VarChar(6), periodo);
-      request.input("agencia", sql.VarChar(5), codAgencia);
+      request.input("agencia", sql.VarChar(2), codAgencia);
       request.input("asesorOrigen", sql.VarChar(150), asesorOrigen);
       request.input("recuperador", sql.VarChar(150), recuperador);
       request.input("search", sql.VarChar(150), searchParam);
@@ -136,7 +110,6 @@ router.get(
           )
       `;
 
-      // Si es la página 1, consultamos Resumen + KPIs + Primer lote de 100 filas
       if (page === 1) {
         const result = await request.query(`
           -- 1. KPIs Globales
@@ -250,7 +223,6 @@ router.get(
         });
       }
 
-      // Si page > 1, solo devolvemos el siguiente lote de filas para el scroll infinito
       const pageRes = await request.query(`
         SELECT
           T.[Periodo] AS periodo,

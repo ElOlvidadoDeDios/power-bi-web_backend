@@ -106,6 +106,9 @@ export function invalidateCacheBucket(bucketName?: BucketName) {
 }
 
 async function syncVersionsFromDatabase(): Promise<boolean> {
+  if (isChecking) return false;
+  isChecking = true;
+
   try {
     const result = await pool.request().query(`
       SELECT
@@ -139,11 +142,9 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
           `🔄 [SmartCache:${key.toUpperCase()} | Id=${bucket.idLog}] Cambio detectado (${bucket.lastFormattedDate}). Refrescando solo sus tablas...`
         );
         await refreshBucketRoutes(bucket, latestVer);
-        // Si cambia mora (Id=4), limpiamos también las rutas de welcome en etl para que vean la mora fresca al instante
         if (key === "mora") {
           buckets.etl.store.clear();
         }
-        // ✅ Si cambian las Metas Diarias (Id=1 / etl), limpiamos también el caché de Productividad en Vivo
         if (key === "etl") {
           buckets.vivo.store.clear();
         }
@@ -155,14 +156,23 @@ async function syncVersionsFromDatabase(): Promise<boolean> {
   } catch (err) {
     console.error("⚠️ [SmartCache] Error leyendo versiones SQL:", err);
     return false;
+  } finally {
+    isChecking = false;
   }
 }
 
 async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
-  const routesToWarm = Array.from(bucket.knownRoutes);
   bucket.store.clear();
   bucket.version = newVersion;
 
+  // Para gerencial (avance/cancelados paginados con múltiples filtros) solo limpiamos RAM
+  // y se recarga bajo demanda al primer clic para evitar 50-90s de prewarm en cada ciclo.
+  if (bucket.name === "gerencial") {
+    console.log(`✅ [SmartCache:GERENCIAL] Caché invalidado en RAM (recarga bajo demanda).`);
+    return;
+  }
+
+  const routesToWarm = Array.from(bucket.knownRoutes);
   if (routesToWarm.length === 0) return;
 
   const start = Date.now();
@@ -182,14 +192,8 @@ async function refreshBucketRoutes(bucket: CacheBucket, newVersion: string) {
 }
 
 export function startCacheWatcher() {
-  const checkLoop = async () => {
-    if (isChecking) return;
-    isChecking = true;
-    try {
-      await syncVersionsFromDatabase();
-    } finally {
-      isChecking = false;
-    }
+  const checkLoop = () => {
+    syncVersionsFromDatabase().catch(() => {});
   };
 
   setTimeout(checkLoop, 1000);
@@ -299,6 +303,7 @@ export async function smartCacheMiddleware(req: Request, res: Response, next: Ne
     if (res.statusCode >= 200 && res.statusCode < 300 && !body?.error) {
       activeBucket.store.set(cacheKey, body);
       if (
+        activeBucket.name !== "gerencial" &&
         activeBucket.knownRoutes.size < 25 &&
         req.originalUrl &&
         (!req.originalUrl.includes("page=") || req.originalUrl.includes("page=1"))

@@ -40,8 +40,8 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
   const agencia =
     agenciaParam === "Todas" || agenciaParam === "Todas las Agencias"
       ? ""
-      : agenciaParam.trim();
-  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim();
+      : agenciaParam.trim().slice(0, 50);
+  const asesor = asesorParam === "Todos" ? "" : asesorParam.trim().slice(0, 100);
 
   try {
     await ensureAvanceCols();
@@ -59,6 +59,7 @@ router.get(["/avance", "/api/avance"], async (req: Request, res: Response) => {
           CAST(ROUND(AVG(CAST(ISNULL([Dias_Atraso], 0) AS FLOAT)), 1) AS DECIMAL(10, 1)) AS Prom_Riesgo,
           MAX(ISNULL([Dias_Atraso], 0)) AS Max_Riesgo
         FROM [DWH_Gestion_Cartera].[dbo].[fct_riesgo_integral] WITH (NOLOCK)
+        WHERE [Fecha_Foto] >= DATEADD(day, -30, CAST(GETDATE() AS DATE))
         GROUP BY LTRIM(RTRIM([Pagare]))
       ),
       BaseAvance AS (

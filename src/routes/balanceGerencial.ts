@@ -1122,7 +1122,7 @@ router.post(
           (@periodo, @fechaCorte, @entidad, @moneda, @saldo, @tea, @obs, @usuario, GETDATE());
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
 
       res.json({ ok: true });
@@ -1148,7 +1148,7 @@ router.delete(
         WHERE [Id] = @id;
 
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] WHERE [Id] = 6)
-          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] IN (2, 6);
+          UPDATE [DWH_Gestion_Cartera].[dbo].[Log_Actualizacion] SET [UltimaActualizacion] = GETDATE() WHERE [Id] = 6;
       `);
       res.json({ ok: true });
     } catch (error) {

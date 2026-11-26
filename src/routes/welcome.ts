@@ -3,13 +3,9 @@ import { Router, Request, Response } from "express";
 import sql from "mssql";
 import { pool } from "../lib/db";
 import { getCombinedVersionSignature } from "../middlewares/smartCache";
-import { AGENCY_NAMES, sqlCaseAgencia } from "../lib/agencies";
+import { AGENCY_NAMES, sqlCaseAgencia, resolveAgencyCode } from "../lib/agencies";
 
 const router = Router();
-
-const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
-  Object.entries(AGENCY_NAMES).map(([k, v]) => [v.toUpperCase(), k])
-);
 
 let tablesEnsured = false;
 
@@ -130,7 +126,7 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
 
     const periodoReq = (req.query.periodo as string) || "";
     const agenciaCodeReq = (req.query.id_age as string) || "";
-    const asesorReq = ((req.query.asesor as string) || "").trim();
+    const asesorReq = ((req.query.asesor as string) || "").trim().slice(0, 150);
 
     const [periodosRes, autoCalcFaltantesDiarios] = await Promise.all([
       pool.request().query(`
@@ -143,11 +139,27 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
     ]);
 
     const periodosDisponibles = periodosRes.recordset.map((p: any) => p.Periodo);
+
+    const cleanPeriodoReq = String(periodoReq || "").replace(/[^0-9]/g, "").slice(0, 6);
     const periodo =
-      periodoReq ||
+      cleanPeriodoReq ||
       periodosDisponibles[0] ||
       new Date().toISOString().slice(0, 7).replace("-", "");
-    const idAgencia = agenciaCodeReq ? agenciaCodeReq.trim().padStart(2, "0") : "";
+
+    const resolvedAge = resolveAgencyCode(agenciaCodeReq);
+    const idAgencia = /^\d{2}$/.test(resolvedAge) ? resolvedAge : "";
+
+    if (
+      agenciaCodeReq &&
+      agenciaCodeReq.trim().length > 2 &&
+      !["todas", "todas las agencias", "null", "undefined"].includes(
+        agenciaCodeReq.trim().toLowerCase()
+      )
+    ) {
+      console.warn(
+        `⚠️ [/welcome/init] id_age recibido con >2 chars: "${agenciaCodeReq}" -> normalizado a "${idAgencia}"`
+      );
+    }
 
     await pool.request().input("periodo", sql.VarChar(6), periodo).query(`
       IF NOT EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WITH (NOLOCK) WHERE [Periodo] = @periodo)
@@ -488,10 +500,8 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
             B.NombreAgencia AS agencia,
             B.opFaltantesFinal AS opFaltantesDia,
             B.crecFaltanteFinal AS crecFaltanteDia,
-            -- ✅ Regla de sugerencia para los Administradores de Agencia: Faltante + 1 en Op y Faltante + 500 en Monto
             (B.opFaltantesFinal + 1) AS sugerenciaOpGerencia,
             (B.crecFaltanteFinal + 500) AS sugerenciaMontoGerencia,
-            -- ✅ Proyecciones ingresadas (0 si aún está pendiente)
             B.proyOpConfirmada AS proyeccionColocacion,
             B.proyMontoConfirmada AS proyeccionMonto,
             ISNULL(SA.sumaOpAsesores, 0) AS sumaOpAsesores,
@@ -702,7 +712,7 @@ router.get(["/welcome/init", "/api/welcome/init"], async (req: Request, res: Res
         ORDER BY [UltimaActualizacion] DESC
       `),
 
-      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día  👈 2. AGREGAR AQUÍ
+      // 2.9. Proyección Híbrida de Repagos, Cancelaciones y Crecimiento Faltante Día
       pool
         .request()
         .query(`
@@ -770,8 +780,8 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
       await pool
         .request()
         .input("json", sql.NVarChar(sql.MAX), JSON.stringify(fullJson))
-        .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+        .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
         .query(`
           IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
             UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]
@@ -792,7 +802,7 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
 
     try {
       for (const f of filas) {
-        const idAge = String(f.idAgencia || NAME_TO_CODE[String(f.agencia || "").toUpperCase()] || "01").padStart(2, "0");
+        const idAge = (resolveAgencyCode(f.idAgencia || f.agencia) || "01").slice(0, 2);
         const opFaltantes = Math.round(Number(f.opFaltantesDia || 0));
         const crecFaltante = Number(f.crecFaltanteDia || 0);
         const sugOp = opFaltantes + 1;
@@ -808,7 +818,7 @@ router.post(["/welcome/metas-diarias", "/api/welcome/metas-diarias"], async (req
           .input("sugMonto", sql.Float, sugMonto)
           .input("proyOp", sql.Int, proyOp)
           .input("proyMonto", sql.Float, proyMonto)
-          .input("autor", sql.VarChar(150), String(usuarioNombre || "Usuario"))
+          .input("autor", sql.VarChar(150), String(usuarioNombre || "Usuario").slice(0, 150))
           .query(`
             DECLARE @Hoy DATE = CAST(DATEADD(hour, -5, GETUTCDATE()) AS DATE);
 
@@ -862,13 +872,13 @@ router.post(["/welcome/meta-asesor", "/api/welcome/meta-asesor"], async (req: Re
   try {
     await ensureWelcomeTables();
     const { idAsesor, asesorNombre, idAgencia, metaOpDia, metaMontoDia } = req.body;
-    const idAge = String(idAgencia || "01").trim().padStart(2, "0");
-    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim();
+    const idAge = (resolveAgencyCode(idAgencia) || "01").slice(0, 2);
+    const codigoAsesor = String(idAsesor || asesorNombre || "ASESOR").trim().slice(0, 30);
 
     await pool.request()
       .input("idAsesor", sql.VarChar(30), codigoAsesor)
       .input("idAge", sql.VarChar(2), idAge)
-      .input("nombre", sql.VarChar(150), String(asesorNombre || codigoAsesor))
+      .input("nombre", sql.VarChar(150), String(asesorNombre || codigoAsesor).slice(0, 150))
       .input("op", sql.Int, Number(metaOpDia || 0))
       .input("monto", sql.Float, Number(metaMontoDia || 0))
       .query(`
@@ -900,7 +910,8 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
   try {
     await ensureWelcomeTables();
     const { periodo, filas, usuarioNombre, usuarioEmail, usuarioRol } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son obligatorios" });
     }
 
@@ -914,7 +925,7 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
 
     try {
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
         .query(`DELETE FROM [dm_productividad].[dbo].[FctMensual] WHERE [Periodo] = @periodo`);
 
       let totalOpBase = 0;
@@ -930,14 +941,15 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
         const asesAjus = Number(row.numeroAsesoresAjus ?? asesMeta);
         const crecMeta = Number(row.crecimientoMeta ?? row.crecimientoMetaAjus ?? 0);
         const crecAjus = Number(row.crecimientoMetaAjus ?? crecMeta);
+        const idAgeInt = parseInt(resolveAgencyCode(row.idAgencia || row.agencia) || "1", 10);
 
         totalOpBase += opMeta;
         totalOpAjus += opAjus;
         totalMontoAjus += montoAjus;
 
         await new sql.Request(transaction)
-          .input("periodo", sql.VarChar(6), String(periodo).trim())
-          .input("idAge", sql.Int, parseInt(String(row.idAgencia || "1"), 10))
+          .input("periodo", sql.VarChar(6), cleanPeriodo)
+          .input("idAge", sql.Int, idAgeInt)
           .input("opMeta", sql.Int, opMeta)
           .input("opAjus", sql.Int, opAjus)
           .input("montoMeta", sql.Float, montoMeta)
@@ -956,13 +968,13 @@ router.post(["/welcome/metas-mensuales", "/api/welcome/metas-mensuales"], async 
 
       const diffOp = totalOpAjus - totalOpBase;
       const diffSign = diffOp >= 0 ? `+${diffOp}` : `${diffOp}`;
-      const resumen = `Actualizó metas del periodo ${periodo} (${filas.length} agencias · Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] · Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
+      const resumen = `Actualizó metas del periodo ${cleanPeriodo} (${filas.length} agencias · Meta Op Base: ${totalOpBase} | Ajustada: ${totalOpAjus} [${diffSign} op.] · Monto Ajustado: S/ ${totalMontoAjus.toLocaleString("es-PE")})`;
 
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
-        .input("nombre", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-        .input("email", sql.VarChar(150), String(usuarioEmail || ""))
-        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
+        .input("nombre", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+        .input("email", sql.VarChar(150), String(usuarioEmail || "").slice(0, 150))
+        .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
         .input("resumen", sql.NVarChar(sql.MAX), resumen)
         .query(`
           INSERT INTO [DWH_Gestion_Cartera].[dbo].[auditoria_metas_mensuales]
@@ -989,7 +1001,8 @@ router.post(["/welcome/administradores", "/api/welcome/administradores"], async 
   try {
     await ensureWelcomeTables();
     const { periodo, filas } = req.body;
-    if (!periodo || !Array.isArray(filas)) {
+    const cleanPeriodo = String(periodo || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (!cleanPeriodo || !Array.isArray(filas)) {
       return res.status(400).json({ error: "Periodo y filas son requeridos" });
     }
 
@@ -998,18 +1011,18 @@ router.post(["/welcome/administradores", "/api/welcome/administradores"], async 
 
     try {
       await new sql.Request(transaction)
-        .input("periodo", sql.VarChar(6), String(periodo).trim())
+        .input("periodo", sql.VarChar(6), cleanPeriodo)
         .query(`DELETE FROM [DWH_Gestion_Cartera].[dbo].[dim_administrador] WHERE [Periodo] = @periodo`);
 
       for (const r of filas) {
-        const idAge = String(r.idAgencia || "01").trim().padStart(2, "0");
+        const idAge = (resolveAgencyCode(r.idAgencia || r.agencia) || "01").slice(0, 2);
         await new sql.Request(transaction)
-          .input("periodo", sql.VarChar(6), String(periodo).trim())
+          .input("periodo", sql.VarChar(6), cleanPeriodo)
           .input("idAge", sql.Char(2), idAge)
-          .input("nombre", sql.NVarChar(100), String(r.nombre || "").trim())
-          .input("celular", sql.VarChar(30), String(r.celular || "").trim())
-          .input("correoPers", sql.VarChar(120), String(r.correoPersonal || "").trim())
-          .input("correoCorp", sql.VarChar(120), String(r.correoCorporativo || "").trim())
+          .input("nombre", sql.NVarChar(100), String(r.nombre || "").trim().slice(0, 100))
+          .input("celular", sql.VarChar(30), String(r.celular || "").trim().slice(0, 30))
+          .input("correoPers", sql.VarChar(120), String(r.correoPersonal || "").trim().slice(0, 120))
+          .input("correoCorp", sql.VarChar(120), String(r.correoCorporativo || "").trim().slice(0, 120))
           .query(`
             INSERT INTO [DWH_Gestion_Cartera].[dbo].[dim_administrador]
               ([Periodo], [IdSAgencia], [Nombre], [Celular], [CorreoPersonal], [CorreoCorporativo])
@@ -1042,11 +1055,11 @@ router.post(["/welcome/compromiso-mora", "/api/welcome/compromiso-mora"], async 
       return res.status(400).json({ error: "El pagaré es obligatorio" });
     }
 
-    const pagareClean = String(pagare).trim();
-    const compText = String(compromiso || "").trim();
+    const pagareClean = String(pagare).trim().slice(0, 40);
+    const compText = String(compromiso || "").trim().slice(0, 500);
     const fechaProm = fechaPromesa && String(fechaPromesa).trim() !== "" ? String(fechaPromesa).trim() : null;
-    const autor = String(usuarioNombre || "Usuario").trim();
-    const rol = String(usuarioRol || "ANALISTA").trim();
+    const autor = String(usuarioNombre || "Usuario").trim().slice(0, 150);
+    const rol = String(usuarioRol || "ANALISTA").trim().slice(0, 60);
 
     await pool.request()
       .input("pagare", sql.VarChar(40), pagareClean)
@@ -1216,8 +1229,8 @@ router.post(["/welcome/config-sistema", "/api/welcome/config-sistema"], async (r
     const jsonStr = JSON.stringify(config);
     await pool.request()
       .input("json", sql.NVarChar(sql.MAX), jsonStr)
-      .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin"))
-      .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN"))
+      .input("autor", sql.VarChar(150), String(usuarioNombre || "Super Admin").slice(0, 150))
+      .input("rol", sql.VarChar(60), String(usuarioRol || "SUPER_ADMIN").slice(0, 60))
       .query(`
         IF EXISTS (SELECT 1 FROM [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control] WHERE [Id] = 1)
           UPDATE [DWH_Gestion_Cartera].[dbo].[cfg_sistema_control]

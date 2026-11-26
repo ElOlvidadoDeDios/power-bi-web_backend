@@ -21,6 +21,7 @@ import productividadVivaRouter from "./productividadViva";
 import balanceGerencialRoutes from "./balanceGerencial";
 import moraProductoRoutes from "./moraProducto";
 import plazoFijoRoutes from "./plazoFijo";
+import reporteConsolidadoRoutes from "./reporteConsolidado";
 
 const router: IRouter = Router();
 
@@ -45,5 +46,6 @@ router.use(productividadVivaRouter);
 router.use(balanceGerencialRoutes);
 router.use(moraProductoRoutes);
 router.use(plazoFijoRoutes);
+router.use(reporteConsolidadoRoutes);
 
 export default router;
